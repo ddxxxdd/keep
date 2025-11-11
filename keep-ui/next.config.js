@@ -1,3 +1,13 @@
+if(typeof window === "undefined"){
+  // 服务器端模拟 localStorage, 避免在服务器端使用 localStorage
+  global.localStorage = {
+    getItem:()=>null,
+    setItem:()=>{},
+    removeItem:()=>{},
+    clear:()=>{}
+  }
+}
+
 const { withSentryConfig } = require("@sentry/nextjs");
 
 const isSentryDisabled =

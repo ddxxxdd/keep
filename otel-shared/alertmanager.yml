@@ -12,4 +12,4 @@ receivers:
         http_config:
           basic_auth:
             username: api_key
-            password: cfe879c6-9423-4c1a-abd8-01e648bf4976
+            password: a71985bb-518b-40cf-8100-1686fae889e8

@@ -227,3 +227,6 @@ grafana/*
 keep/providers/grafana_provider/grafana/png/*
 topology.sh
 posthog.py
+
+loki-data/
+prometheus-data/

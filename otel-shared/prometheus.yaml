@@ -13,3 +13,12 @@ scrape_configs:
   - job_name: 'wordpress'
     static_configs:
       - targets: [ 'otel-collector:9100' ]
+
+rule_files:
+  - /etc/rules.yml
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093

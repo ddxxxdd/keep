@@ -1,5 +1,7 @@
 server:
   http_listen_port: 3200
+  grpc_listen_address: 0.0.0.0  # 添加这行，让 gRPC 监听所有接口
+  http_listen_address: 0.0.0.0   # 添加这行，让 HTTP 监听所有接口
 
 distributor:
   receivers:                           # this configuration will listen on all ports and protocols that tempo is capable of.
@@ -13,7 +15,9 @@ distributor:
     otlp:
       protocols:
         http:
+          endpoint: 0.0.0.0:4318  # 明确指定监听地址
         grpc:
+          endpoint: 0.0.0.0:4317  # 明确指定监听地址
     opencensus:
 
 ingester:

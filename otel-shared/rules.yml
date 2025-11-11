@@ -1,0 +1,26 @@
+groups:
+  - name: demo-alerts
+    rules:
+      # 手动触发测试告警：2 分钟内添加至少 5 个商品
+      - alert: ManualCartAddItemTest
+        expr: increase(keep_app_cart_add_item_latency_count[2m]) >= 5
+        for: 30s
+        labels:
+          severity: warning
+          test_alert: "true"
+          manual_trigger: "true"
+        annotations:
+          summary: "手动触发测试告警 - 购物车添加商品"
+          description: "检测到手动操作：在 2 分钟内添加了至少 5 个商品到购物车（实际 {{ $value }} 次）"
+      
+      # 备选测试告警：基于 HTTP 请求（更通用）
+      - alert: ManualCartRequestTest
+        expr: increase(keep_http_server_request_duration_count{service_name="cart"}[2m]) >= 8
+        for: 30s
+        labels:
+          severity: info
+          test_alert: "true"
+          manual_trigger: "true"
+        annotations:
+          summary: "手动触发测试告警 - Cart 请求"
+          description: "检测到手动操作：Cart 服务在 2 分钟内收到至少 8 个请求（实际 {{ $value }} 个）"

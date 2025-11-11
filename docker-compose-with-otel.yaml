@@ -7,6 +7,8 @@ services:
     ports:
       - "3100:3100"
     command: ["-config.file=/etc/loki/local-config.yaml"]
+    volumes:
+        - ./loki-data:/loki  
 
   tempo:
     image: grafana/tempo:latest
@@ -20,8 +22,8 @@ services:
       - "14268:14268" # jaeger ingest
       - "3200:3200" # tempo
       - "9095:9095" # tempo grpc
-      - "4317:4317" # otlp grpc
-      - "4318:4318" # otlp http
+      # - "4317:4317" # otlp grpc
+      # - "4318:4318" # otlp http
       - "9411:9411" # zipkin
 
   prometheus:
@@ -35,6 +37,8 @@ services:
       - --enable-feature=exemplar-storage
     volumes:
       - ./otel-shared/prometheus.yaml:/etc/prometheus.yaml
+      - ./otel-shared/rules.yml:/etc/rules.yml
+      - ./prometheus-data:/prometheus   # 持久化数据
     ports:
       - "9090:9090"
 
@@ -44,6 +48,8 @@ services:
       - otel
 
     container_name: alertmanager
+    ports:
+      - "9093:9093"
     volumes:
       - ./otel-shared/alertmanager.yml:/etc/alertmanager/alertmanager.yml
     command:
@@ -77,6 +83,8 @@ services:
 
     ports:
       - "9100:9100"
+      - "4317:4317"   # <- 添加 OTLP gRPC
+      - "4318:4318"   # <- 添加 OTLP HTTP
     depends_on:
       - tempo
       - loki
