@@ -1752,25 +1752,25 @@ def get_started_at_for_alerts(
         result = session.exec(statement).all()
         return {row[0]: row[1] for row in result}
 
-
+# 获取最近告警列表
 def get_last_alerts(
     tenant_id,
     provider_id=None,
     limit=1000,
-    timeframe=None,
+    timeframe=None,   # 时间范围
     upper_timestamp=None,
     lower_timestamp=None,
-    with_incidents=False,
+    with_incidents=False,   # 是否包含事件
     fingerprints=None,
 ) -> list[Alert]:
 
     with Session(engine) as session:
         dialect_name = session.bind.dialect.name
 
-        # Build the base query using select()
+        # Build the base query using select()   #构建基础查询，使用select()语句。
         stmt = (
-            select(Alert, LastAlert.first_timestamp.label("startedAt"))
-            .select_from(LastAlert)
+            select(Alert, LastAlert.first_timestamp.label("startedAt")) # 选择Alert和LastAlert表中的first_timestamp列，并将其命名为startedAt。
+            .select_from(LastAlert) # 从LastAlert表中选择数据。
             .join(Alert, LastAlert.alert_id == Alert.id)
             .where(LastAlert.tenant_id == tenant_id)
             .where(Alert.tenant_id == tenant_id)
@@ -1803,7 +1803,7 @@ def get_last_alerts(
         stmt = stmt.options(subqueryload(Alert.alert_enrichment))
 
         if with_incidents:
-            if dialect_name == "sqlite":
+            if dialect_name == "sqlite":   # SQLite版本 - 使用JSON
                 # SQLite version - using JSON
                 incidents_subquery = (
                     select(
@@ -1820,7 +1820,7 @@ def get_last_alerts(
                     .subquery()
                 )
 
-            elif dialect_name == "mysql":
+            elif dialect_name == "mysql":   # MySQL版本 - 使用GROUP_CONCAT
                 # MySQL version - using GROUP_CONCAT
                 incidents_subquery = (
                     select(
@@ -1837,7 +1837,7 @@ def get_last_alerts(
                     .subquery()
                 )
 
-            elif dialect_name == "postgresql":
+            elif dialect_name == "postgresql":   # PostgreSQL版本 - 使用string_agg
                 # PostgreSQL version - using string_agg
                 incidents_subquery = (
                     select(
@@ -1857,9 +1857,9 @@ def get_last_alerts(
             else:
                 raise ValueError(f"Unsupported dialect: {dialect_name}")
 
-            stmt = stmt.add_columns(incidents_subquery.c.incidents)
+            stmt = stmt.add_columns(incidents_subquery.c.incidents)   # 添加事件列
             stmt = stmt.outerjoin(
-                incidents_subquery,
+                incidents_subquery,   # 外连接事件表
                 Alert.fingerprint == incidents_subquery.c.fingerprint,
             )
 
@@ -1869,10 +1869,10 @@ def get_last_alerts(
         # Order by timestamp in descending order and limit the results
         stmt = stmt.order_by(desc(Alert.timestamp)).limit(limit)
 
-        # Execute the query
+        # Execute the query   #执行查询
         alerts_with_start = session.execute(stmt).all()
 
-        # Process results based on dialect
+        # Process results based on dialect   #根据数据库类型处理结果
         alerts = []
         for alert_data in alerts_with_start:
             alert = alert_data[0]
@@ -1894,7 +1894,7 @@ def get_last_alerts(
 
                 alert.event["incident"] = str(incident_id) if incident_id else None
 
-            alerts.append(alert)
+            alerts.append(alert)   # 将处理后的告警实体添加到列表中
 
         return alerts
 
@@ -3840,7 +3840,7 @@ def enrich_incidents_with_alerts(
 
         return incidents
 
-
+# 增强告警事件，添加事件信息。
 def enrich_alerts_with_incidents(
     tenant_id: str, alerts: List[Alert], session: Optional[Session] = None
 ):
@@ -3864,7 +3864,7 @@ def enrich_alerts_with_incidents(
                 ),
             )
         ).all()
-
+        # 将事件信息与告警事件关联。
         incidents_per_alert = defaultdict(list)
         for fingerprint, incident in alert_incidents:
             incidents_per_alert[fingerprint].append(incident)
@@ -3872,7 +3872,7 @@ def enrich_alerts_with_incidents(
         for alert in alerts:
             alert._incidents = incidents_per_alert[alert.fingerprint]
 
-        return alerts
+        return alerts   # 返回增强后的告警事件列表。
 
 
 def get_incidents_by_alert_fingerprint(
@@ -5683,7 +5683,7 @@ def get_last_alert_by_fingerprint(
             query = query.with_for_update()
         return session.exec(query).first()
 
-
+# 设置最近告警记录，处理告警事件时调用。
 def set_last_alert(
     tenant_id: str, alert: Alert, session: Optional[Session] = None, max_retries=3
 ) -> None:

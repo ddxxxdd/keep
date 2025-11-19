@@ -405,15 +405,15 @@ export const DeduplicationTable: React.FC<DeduplicationTableProps> = ({
             ))}
           </TableHead>
           <TableBody>
-            {table.getRowModel().rows.map((row) => (
+            {table.getRowModel().rows.map((row) => (  
               <TableRow
                 key={row.id}
                 className="cursor-pointer hover:bg-slate-50 group"
-                onClick={() => onDeduplicationClick(row.original)}
+                onClick={() => onDeduplicationClick(row.original)}  
               >
                 {row.getVisibleCells().map((cell) => {
                   const { style, className } =
-                    getCommonPinningStylesAndClassNames(
+                    getCommonPinningStylesAndClassNames(  
                       cell.column,
                       table.getState().columnPinning.left?.length,
                       table.getState().columnPinning.right?.length

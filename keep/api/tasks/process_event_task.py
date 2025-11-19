@@ -126,7 +126,7 @@ def __validate_last_received(event):
                 tz=datetime.timezone.utc
             ).isoformat()
 
-
+# 将格式化后的告警事件保存到数据库
 def __save_to_db(
     tenant_id,
     provider_type,
@@ -357,7 +357,7 @@ def __save_to_db(
         )
         raise
 
-
+"""处理格式化后的告警事件"""
 def __handle_formatted_events(
     tenant_id,
     provider_type,
@@ -378,7 +378,13 @@ def __handle_formatted_events(
     3. runs workflows based on the alerts
     4. runs the rules engine
     5. update the presets
-
+    这是超级重要的函数，做五件事：
+    0. 使用 alertdeduplicator 检查去重
+    1. 将告警添加到 DB
+    2. 将告警添加到 ElasticSearch
+    3. 基于告警运行工作流
+    4. 运行规则引擎
+    5. 更新预设
     TODO: add appropriate logs, trace and all of that so we can track errors
 
     """
@@ -392,14 +398,14 @@ def __handle_formatted_events(
             "job_id": job_id,
         },
     )
-
+    # 第一步，检查维护窗口
     # first, check for maintenance windows
     if KEEP_MAINTENANCE_WINDOWS_ENABLED:
         with tracer.start_as_current_span("process_event_maintenance_windows_check"):
             maintenance_windows_bl = MaintenanceWindowsBl(
                 tenant_id=tenant_id, session=session
             )
-            if maintenance_windows_bl.maintenance_rules:
+            if maintenance_windows_bl.maintenance_rules:    # 如果维护窗口配置了，则过滤掉在维护窗口内的告警
                 formatted_events = [
                     event
                     for event in formatted_events
@@ -422,7 +428,8 @@ def __handle_formatted_events(
                 return
 
     with tracer.start_as_current_span("process_event_deduplication"):
-        # second, filter out any deduplicated events
+        # 第二步，过滤掉重复的告警
+        # second, filter out any deduplicated events    
         alert_deduplicator = AlertDeduplicator(tenant_id)
         deduplication_rules = alert_deduplicator.get_deduplication_rules(
             tenant_id=tenant_id, provider_id=provider_id, provider_type=provider_type
@@ -649,6 +656,7 @@ def __handle_formatted_events(
     return enriched_formatted_events
 
 
+"""处理告警，将告警完整处理为“可展示的告警实体”，并返回处理后的告警实体列表"""
 @processing_time_summary.time()
 def process_event(
     ctx: dict,  # arq context
@@ -667,6 +675,7 @@ def process_event(
     start_time = time.time()
     job_id = ctx.get("job_id")
 
+    # 额外信息，用于日志记录
     extra_dict = {
         "tenant_id": tenant_id,
         "provider_type": provider_type,
@@ -677,7 +686,7 @@ def process_event(
         "job_id": job_id,
         "raw_event": (
             event if KEEP_STORE_RAW_ALERTS else None
-        ),  # Let's log the events if we store it for debugging
+        ),  # Let's log the events if we store it for debugging 
     }
     logger.info("Processing event", extra=extra_dict)
 
@@ -687,17 +696,18 @@ def process_event(
     events_in_counter.inc()
     try:
         with tracer.start_as_current_span("process_event_get_db_session"):
-            # Create a session to be used across the processing task
+            # Create a session to be used across the processing task    # 创建一个会话，用于在整个处理任务中使用
             session = get_session_sync()
-
-        # Pre alert formatting extraction rules
-        with tracer.start_as_current_span("process_event_pre_alert_formatting"):
-            enrichments_bl = EnrichmentsBl(tenant_id, session)
+        
+        # Pre alert formatting extraction rules  # 预处理告警格式化提取规则，提取告警的各个字段
+        with tracer.start_as_current_span("process_event_pre_alert_formatting"):    
+            enrichments_bl = EnrichmentsBl(tenant_id, session)  # 创建一个富化对象，用于在整个处理任务中使用
             try:
                 event = enrichments_bl.run_extraction_rules(event, pre=True)
             except Exception:
                 logger.exception("Failed to run pre-formatting extraction rules")
 
+        """处理提供商格式化（将原始 webhook/form 转成 AlertDto 列表）"""
         with tracer.start_as_current_span("process_event_provider_formatting"):
             if (
                 provider_type is not None
@@ -710,11 +720,12 @@ def process_event(
                 except Exception:
                     provider_class = ProvidersFactory.get_provider_class("keep")
 
-                if isinstance(event, list):
-                    event_list = []
+        # 如果event是列表，则遍历列表中的每个元素，如果元素不是AlertDto，则调用provider_class.format_alert方法，将元素转换为AlertDto，否则直接添加到event_list中，最后将event_list赋值给event
+                if isinstance(event, list): 
+                    event_list = []  # 创建一个空列表，用于存储转换后的AlertDto
                     for event_item in event:
-                        if not isinstance(event_item, AlertDto):
-                            event_list.append(
+                        if not isinstance(event_item, AlertDto):  # 如果元素不是AlertDto，则调用provider_class.format_alert方法，将元素转换为AlertDto
+                            event_list.append(  # 将转换后的AlertDto添加到event_list中
                                 provider_class.format_alert(
                                     tenant_id=tenant_id,
                                     event=event_item,
@@ -732,6 +743,7 @@ def process_event(
                         provider_id=provider_id,
                         provider_type=provider_type,
                     )
+                
                 # SHAHAR: for aws cloudwatch, we get a subscription notification message that we should skip
                 #         todo: move it to be generic
                 if event is None and provider_type == "cloudwatch":
@@ -755,22 +767,22 @@ def process_event(
                 )
                 return None
 
-            # In case when provider_type is not set
+            # In case when provider_type is not set # 如果event是字典，则检查字典中是否包含name字段，如果不包含，则将id字段赋值给name字段，最后将event转换为AlertDto列表，并赋值给event
             if isinstance(event, dict):
-                if not event.get("name"):
-                    event["name"] = event.get("id", "unknown alert name")
-                event = [AlertDto(**event)]
-                raw_event = [raw_event]
+                if not event.get("name"):  # 如果字典中不包含name字段，则将id字段赋值给name字段
+                    event["name"] = event.get("id", "unknown alert name")  # 如果字典中不包含id字段，则将"unknown alert name"赋值给name字段
+                event = [AlertDto(**event)]  # 将event转换为AlertDto列表
+                raw_event = [raw_event]  # 将raw_event转换为AlertDto列表
 
-            # Prepare the event for the digest
+            # Prepare the event for the digest # 如果event是AlertDto，则将event转换为AlertDto列表，并赋值给event
             if isinstance(event, AlertDto):
                 event = [event]
                 raw_event = [raw_event]
 
             with tracer.start_as_current_span("process_event_internal_preparation"):
-                __internal_prepartion(event, fingerprint, api_key_name)
+                __internal_prepartion(event, fingerprint, api_key_name)  # 内部准备，设置告警的指纹和API密钥名称
 
-            formatted_events = __handle_formatted_events(
+            formatted_events = __handle_formatted_events(  # 处理格式化后的告警事件
                 tenant_id,
                 provider_type,
                 session,
@@ -787,7 +799,7 @@ def process_event(
                 "Event processed",
                 extra={**extra_dict, "processing_time": time.time() - start_time},
             )
-            events_out_counter.inc()
+            events_out_counter.inc()    
             return formatted_events
     except Exception:
         stacktrace = traceback.format_exc()

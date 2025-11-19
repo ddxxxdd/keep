@@ -82,15 +82,16 @@ from keep.workflowmanager.workflowmanager import WorkflowManager
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
-REDIS = os.environ.get("REDIS", "false") == "true"
-EVENT_WORKERS = int(config("KEEP_EVENT_WORKERS", default=5, cast=int))
+REDIS = os.environ.get("REDIS", "false") == "true" # 是否启用Redis队列
+EVENT_WORKERS = int(config("KEEP_EVENT_WORKERS", default=5, cast=int)) # 事件处理工作线程数
 
 # Create dedicated threadpool
-process_event_executor = ThreadPoolExecutor(
+process_event_executor = ThreadPoolExecutor( # 创建专用线程池，用于处理事件
     max_workers=EVENT_WORKERS, thread_name_prefix="process_event_worker"
 )
 
 
+# 根据 CEL 表达式查询告警分面选项，支持复杂筛选。
 @router.post(
     "/facets/options",
     description="Query alert facet options. Accepts dictionary where key is facet id and value is cel to query facet",
@@ -133,6 +134,7 @@ def fetch_alert_facet_options(
     return facet_options
 
 
+# 返回租户所有可用的告警分面。
 @router.get(
     "/facets",
     description="Get alert facets",
@@ -163,6 +165,7 @@ def fetch_alert_facets(
     return facets
 
 
+# 返回可用于分面的字段列表。
 @router.get(
     "/facets/fields",
     description="Get potential fields for alert facets",
@@ -191,7 +194,7 @@ def fetch_alert_facet_fields(
     )
     return fields
 
-
+# 根据 CEL 表达式查询告警。
 @router.post(
     "/query",
     description="Get last alerts occurrence",
@@ -211,7 +214,7 @@ def query_alerts(
         pull_data_from_providers,
         authenticated_entity.tenant_id,
         request.state.trace_id,
-    )
+    )   # 添加任务，从提供商拉取数据
 
     tenant_id = authenticated_entity.tenant_id
     logger.info(
@@ -222,7 +225,7 @@ def query_alerts(
     )
 
     try:
-        db_alerts, total_count = query_last_alerts(tenant_id=tenant_id, query=query)
+        db_alerts, total_count = query_last_alerts(tenant_id=tenant_id, query=query) #调用core/alerts.py（执行业务逻辑）中的query_last_alerts函数，查询最近告警列表
     except CelToSqlException as e:
         logger.exception(f'Error parsing CEL expression "{query.cel}". {str(e)}')
         raise HTTPException(
@@ -230,7 +233,7 @@ def query_alerts(
         ) from e
 
     db_alerts = enrich_alerts_with_incidents(tenant_id, db_alerts)
-    enriched_alerts_dto = convert_db_alerts_to_dto_alerts(
+    enriched_alerts_dto = convert_db_alerts_to_dto_alerts( 
         db_alerts, with_incidents=True
     )
     logger.info(
@@ -249,7 +252,7 @@ def query_alerts(
         "results": enriched_alerts_dto,
     }
 
-
+# 获取最近告警列表
 @router.get(
     "",
     description="Get last alerts occurrence",
@@ -278,7 +281,7 @@ def get_all_alerts(
 
     return enriched_alerts_dto
 
-
+# 根据指纹（fingerprint）获取同一告警的历史记录。
 @router.get("/{fingerprint}/history", description="Get alert history")
 def get_alert_history(
     fingerprint: str,
@@ -464,7 +467,7 @@ def assign_alert(
     )
     return {"status": "ok"}
 
-
+# 清理已完成任务，记录处理时间和异常，记录处理时间和异常
 def discard_future(
     trace_id: str,
     future: Future,
@@ -516,7 +519,7 @@ def discard_future(
             },
         )
 
-
+# 创建处理事件任务，提交给线程池执行。
 def create_process_event_task(
     tenant_id: str,
     provider_type: str | None,
@@ -547,12 +550,12 @@ def create_process_event_task(
     running_tasks.add(future)
     future.add_done_callback(
         lambda task: discard_future(trace_id, task, running_tasks, started_time)
-    )
+    ) # 添加任务完成回调，用于清理运行中的任务。
 
     logger.info("Task added", extra={"trace_id": trace_id})
     return str(id(future))
 
-
+# 接收通用告警事件
 @router.post(
     "/event",
     description="Receive a generic alert event",
@@ -577,7 +580,7 @@ async def receive_generic_event(
         tenant_id (str, optional): Defaults to Depends(verify_api_key).
     """
     running_tasks: set = request.state.background_tasks
-    if REDIS:
+    if REDIS: # 如果启用Redis，将事件放入队列
         redis: ArqRedis = await get_pool()
         job = await redis.enqueue_job(
             "process_event_in_worker",
@@ -600,6 +603,7 @@ async def receive_generic_event(
         )
         task_name = job.job_id
     else:
+        # 如果未启用Redis，直接创建任务
         task_name = create_process_event_task(
             authenticated_entity.tenant_id,
             None,
@@ -613,6 +617,7 @@ async def receive_generic_event(
     return JSONResponse(content={"task_name": task_name}, status_code=202)
 
 
+# 完成 Netdata 的 webhook 验证挑战（HMAC SHA-256）
 # https://learn.netdata.cloud/docs/alerts-&-notifications/notifications/centralized-cloud-notifications/webhook#challenge-secret
 @router.get(
     "/event/netdata",
@@ -639,7 +644,7 @@ async def webhook_challenge():
 
     return json.dumps(response)
 
-
+"""接收特定提供商的告警事件"""
 @router.post(
     "/event/{provider_type}",
     description="Receive an alert event from a provider",
@@ -992,6 +997,7 @@ def batch_enrich_alerts(
         return {"status": "failed"}
 
 
+# 对告警进行增强处理，添加注释、状态、工单URL等信息。
 @router.post(
     "/enrich",
     description="Enrich an alert",

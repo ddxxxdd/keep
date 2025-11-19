@@ -39,7 +39,7 @@ class AlertToIncident(SQLModel, table=True):
         default=NULL_FOR_DELETED_AT,
     )
 
-
+# 最近告警记录表
 class LastAlert(SQLModel, table=True):
 
     tenant_id: str = Field(foreign_key="tenant.id", nullable=False, primary_key=True)

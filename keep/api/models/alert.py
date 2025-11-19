@@ -67,7 +67,7 @@ class AlertErrorDto(BaseModel):
     error_message: Optional[str] = None
     timestamp: datetime.datetime
 
-
+# 告警实体DTO模型
 class AlertDto(BaseModel):
     id: str | None
     name: str

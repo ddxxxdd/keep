@@ -87,6 +87,7 @@ KEEP_DEBUG_MIDDLEWARES = config("KEEP_DEBUG_MIDDLEWARES", default="false", cast=
 KEEP_USE_LIMITER = config("KEEP_USE_LIMITER", default="false", cast=bool)
 MAINTENANCE_WINDOWS = config("MAINTENANCE_WINDOWS", default="false", cast=bool)
 
+# 根据配置选择认证方式
 AUTH_TYPE = config("AUTH_TYPE", default=IdentityManagerTypes.NOAUTH.value).lower()
 try:
     KEEP_VERSION = metadata.version("keep")
@@ -106,6 +107,7 @@ requests.Session.request = no_redirect_request
 
 
 async def check_pending_tasks(background_tasks: set):
+    """调试功能：监控后台任务"""
     while True:
         events_in_queue = len(background_tasks)
         logger.info(
@@ -118,6 +120,7 @@ async def check_pending_tasks(background_tasks: set):
 
 
 async def startup():
+    """应用启动时执行的初始化工作"""
     """
     This runs for every worker on startup.
     Read more about lifespan here: https://fastapi.tiangolo.com/advanced/events/#lifespan
@@ -125,16 +128,17 @@ async def startup():
     logger.info("Disope existing DB connections")
     # psycopg2.DatabaseError: error with status PGRES_TUPLES_OK and no message from the libpq
     # https://stackoverflow.com/questions/43944787/sqlalchemy-celery-with-scoped-session-error/54751019#54751019
-    dispose_session()
+    dispose_session() # 清理现有数据库连接，防止连接池问题
 
     logger.info("Starting the services")
 
+    # 根据配置启动不同服务组件
     # Start the scheduler
     if SCHEDULER:
         try:
             logger.info("Starting the scheduler")
             wf_manager = WorkflowManager.get_instance()
-            await wf_manager.start()
+            await wf_manager.start()  # 启动工作流调度器
             logger.info("Scheduler started successfully")
         except Exception:
             logger.exception("Failed to start the scheduler")
@@ -147,7 +151,7 @@ async def startup():
             # TODO: there is some "race condition" since if the consumer starts before the server,
             #       and start getting events, it will fail since the server is not ready yet
             #       we should add a "wait" here to make sure the server is ready
-            await event_subscriber.start()
+            await event_subscriber.start() # 启动事件订阅者
             logger.info("Consumer started successfully")
         except Exception:
             logger.exception("Failed to start the consumer")
@@ -156,7 +160,7 @@ async def startup():
         try:
             logger.info("Starting the topology processor")
             topology_processor = TopologyProcessor.get_instance()
-            await topology_processor.start()
+            await topology_processor.start() # 启动拓扑处理器
             logger.info("Topology processor started successfully")
         except Exception:
             logger.exception("Failed to start the topology processor")
@@ -191,6 +195,7 @@ async def startup():
 
 
 async def shutdown():
+    """应用关闭时执行的清理工作"""
     """
     This runs for every worker on shutdown.
     Read more about lifespan here: https://fastapi.tiangolo.com/advanced/events/#lifespan
@@ -228,6 +233,8 @@ async def lifespan(app: FastAPI):
     app.state.limiter = limiter
     # create a set of background tasks
     background_tasks = set()
+
+    # 调试功能：监控后台任务
     # if debug tasks are enabled, create a task to check for pending tasks
     if KEEP_DEBUG_TASKS:
         logger.info("Starting background task to check for pending tasks")
@@ -237,12 +244,13 @@ async def lifespan(app: FastAPI):
     await startup()
 
     # yield the background tasks, this is available for the app to use in request context
-    yield {"background_tasks": background_tasks}
+    yield {"background_tasks": background_tasks} # 应用运行期间保持后台任务集合
 
     # Shutdown
     await shutdown()
 
 
+"""创建并配置FastAPI应用实例"""
 def get_app(
     auth_type: IdentityManagerTypes = IdentityManagerTypes.NOAUTH.value,
 ) -> FastAPI:
@@ -261,26 +269,31 @@ def get_app(
             "keep_api_url": keep_api_url,
         },
     )
-
+    # 创建FastAPI应用实例，设置应用信息和生命周期管理
     app = FastAPI(
         title="Keep API",
         description="Rest API powering https://platform.keephq.dev and friends 🏄‍♀️",
         version=KEEP_VERSION,
-        lifespan=lifespan,
+        lifespan=lifespan,# 使用自定义生命周期管理
     )
 
+    # 根路由，返回应用描述和版本
     @app.get("/", include_in_schema=False)
-    async def root():
+    async def root(): 
         """
         App description and version.
         """
         return {"message": app.description, "version": KEEP_VERSION}
 
-    app.add_middleware(RawContextMiddleware, plugins=(plugins.RequestIdPlugin(),))
+    # 1. 请求上下文中间件 - 为每个请求生成唯一ID
+    app.add_middleware(RawContextMiddleware, plugins=(plugins.RequestIdPlugin(),))# 为每个请求生成唯一ID
+    # 2. 速率限制异常处理
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    # 3. GZip压缩中间件 - 对大于30MB的响应进行压缩
     app.add_middleware(
         GZipMiddleware, minimum_size=30 * 1024 * 1024
     )  # Approximately 30 MiB, https://cloud.google.com/run/quotas
+    # 4. 跨域中间件 - 允许所有来源的跨域请求
     app.add_middleware(
         CORSMiddleware,
         allow_origins=["*"],
@@ -288,7 +301,9 @@ def get_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
-    app.include_router(providers.router, prefix="/providers", tags=["providers"])
+    # 各种功能模块的路由注册
+    app.include_router(providers.router, prefix="/providers", tags=["providers"])# tags用于在API文档中分组显示
+
     app.include_router(actions.router, prefix="/actions", tags=["actions"])
     app.include_router(ai.router, prefix="/ai", tags=["ai"])
     app.include_router(healthcheck.router, prefix="/healthcheck", tags=["healthcheck"])
@@ -338,8 +353,9 @@ def get_app(
         SINGLE_TENANT_UUID, None, AUTH_TYPE
     )
     # if any endpoints needed, add them on_start
-    identity_manager.on_start(app)
+    identity_manager.on_start(app)# 添加认证相关端点
 
+    # 异常处理中间件，捕获未处理的异常
     @app.exception_handler(Exception)
     async def catch_exception(request: Request, exc: Exception):
         logging.error(
@@ -354,7 +370,9 @@ def get_app(
             },
         )
 
+    # 5. 请求日志记录中间件
     app.add_middleware(LoggingMiddleware)
+    # 如果启用速率限制，添加速率限制中间件
     if KEEP_USE_LIMITER:
         app.add_middleware(SlowAPIMiddleware)
 
@@ -383,6 +401,7 @@ logger = logging.getLogger(__name__)
 # This (and instrument_middleware) is a helper function to wrap the call of a middleware with timing
 # It will log the time it took for the middleware to run
 # It should NOT be used in production!
+"""包装中间件调用，添加执行时间日志"""
 def wrap_call(middleware_cls, original_call):
     # if the call is already wrapped, return it
     if hasattr(original_call, "_timing_wrapped"):
@@ -427,6 +446,7 @@ def instrument_middleware(app):
 
 
 def run(app: FastAPI):
+    """启动Uvicorn服务器"""
     logger.info("Starting the uvicorn server")
     # call on starting to create the db and tables
     import keep.api.config

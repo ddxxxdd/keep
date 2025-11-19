@@ -129,13 +129,13 @@ def dumps(_json) -> str:
     """
     return json.dumps(_json, default=str)
 
-
+# 创建数据库引擎
 def create_db_engine():
     """
     Creates a database engine based on the environment variables.
     """
     if RUNNING_IN_CLOUD_RUN and not KEEP_FORCE_CONNECTION_STRING:
-        engine = create_engine(
+        engine = create_engine(  
             "mysql+pymysql://",
             creator=__get_conn,
             echo=DB_ECHO,
@@ -144,7 +144,7 @@ def create_db_engine():
             max_overflow=DB_MAX_OVERFLOW,
         )
     elif DB_CONNECTION_STRING == "impersonate":
-        engine = create_engine(
+        engine = create_engine(   
             "mysql+pymysql://",
             creator=__get_conn_impersonate,
             echo=DB_ECHO,
@@ -167,7 +167,7 @@ def create_db_engine():
                 DB_CONNECTION_STRING, json_serializer=dumps, echo=DB_ECHO
             )
     else:
-        engine = create_engine(
+        engine = create_engine(   # 创建SQLite引擎
             "sqlite:///./keep.db",
             connect_args={"check_same_thread": False},
             echo=DB_ECHO,
@@ -175,14 +175,14 @@ def create_db_engine():
         )
     return engine
 
-
+# 获取JSON提取字段
 def get_json_extract_field(session, base_field, key):
-    if session.bind.dialect.name == "postgresql":
+    if session.bind.dialect.name == "postgresql":   # PostgreSQL版本 - 使用json_extract_path_text
         return func.json_extract_path_text(base_field, key)
-    elif session.bind.dialect.name == "mysql":
+    elif session.bind.dialect.name == "mysql":   # MySQL版本 - 使用json_unquote
         return func.json_unquote(func.json_extract(base_field, "$.{}".format(key)))
     else:
-        return func.json_extract(base_field, "$.{}".format(key))
+        return func.json_extract(base_field, "$.{}".format(key))   # SQLite版本 - 使用json_extract
 
 
 def get_aggreated_field(session: Session, column_name: str, alias: str):

@@ -12,7 +12,7 @@ router = APIRouter()
 
 logger = logging.getLogger(__name__)
 
-
+# 获取去重规则列表
 @router.get(
     "",
     description="Get Deduplications",

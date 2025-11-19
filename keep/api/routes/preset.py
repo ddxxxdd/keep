@@ -131,7 +131,7 @@ def pull_data_from_providers(
                         provider_type=provider.type,
                         incidents=incidents,
                         trace_id=trace_id,
-                    )
+                    )   # 处理事件
                 except NotImplementedError:
                     logger.debug(
                         f"Provider {provider.type} ({provider.id}) does not implement pulling incidents",

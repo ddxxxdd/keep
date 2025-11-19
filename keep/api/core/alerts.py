@@ -317,7 +317,7 @@ def __build_query_for_filtering(
         "fetch_incidents": fetch_incidents,
     }
 
-
+# 构建总告警查询
 def build_total_alerts_query(tenant_id, query: QueryDto):
     fetch_incidents = query.cel and "incident." in query.cel
     fetch_alerts_data = query.cel is not None or query.cel != ""
@@ -380,7 +380,7 @@ def build_alerts_query(tenant_id, query: QueryDto):
 def query_last_alerts(tenant_id, query: QueryDto) -> Tuple[list[Alert], int]:
     query_with_defaults = query.copy()
 
-    # Shahar: this happens when the frontend query builder fails to build a query
+    # Shahar: this happens when the frontend query builder fails to build a query   #当前端查询构建器无法构建查询时发生。
     if query_with_defaults.cel == "1 == 1":
         logger.warning("Failed to build query for alerts")
         query_with_defaults.cel = ""

@@ -177,6 +177,7 @@ def calculated_unresolved_counter(
     return previous_alert.unresolvedCounter + 1
 
 
+# 将数据库告警转换为DTO告警
 def convert_db_alerts_to_dto_alerts(
     alerts: list[Alert | tuple[Alert, LastAlertToIncident]],
     with_incidents: bool = False,
@@ -184,14 +185,14 @@ def convert_db_alerts_to_dto_alerts(
     session: Optional[Session] = None,
 ) -> list[AlertDto | AlertWithIncidentLinkMetadataDto]:
     """
-    Enriches the alerts with the enrichment data.
+    Enriches the alerts with the enrichment data.   #增强告警事件，添加增强数据。
 
     Args:
-        alerts (list[Alert]): The alerts to enrich.
-        with_incidents (bool): enrich with incidents data
+        alerts (list[Alert]): The alerts to enrich.   #要增强的告警列表。
+        with_incidents (bool): enrich with incidents data   #是否增强包含事件数据。
 
     Returns:
-        list[AlertDto | AlertWithIncidentLinkMetadataDto]: The enriched alerts.
+        list[AlertDto | AlertWithIncidentLinkMetadataDto]: The enriched alerts.   #增强后的告警列表。
     """
     with existed_or_new_session(session) as session:
         alerts_dto = []
@@ -228,10 +229,10 @@ def convert_db_alerts_to_dto_alerts(
                             alert, alert_to_incident
                         )
                     else:
-                        alert_dto = AlertDto(**alert.event)
+                        alert_dto = AlertDto(**alert.event)   # 将告警事件转换为DTO告警。
 
                     if enrichments:
-                        parse_and_enrich_deleted_and_assignees(alert_dto, enrichments)
+                        parse_and_enrich_deleted_and_assignees(alert_dto, enrichments)   # 解析并增强删除和分配信息。
 
                 except Exception:
                     # should never happen but just in case

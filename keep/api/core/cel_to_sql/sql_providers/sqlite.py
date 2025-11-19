@@ -12,30 +12,30 @@ from keep.api.core.cel_to_sql.sql_providers.base import BaseCelToSqlProvider
 
 
 class CelToSqliteProvider(BaseCelToSqlProvider):
-
+    # 生成SQL表达式，提取JSON列中的特定路径。
     def json_extract_as_text(self, column: str, path: list[str]) -> str:
         property_path_str = ".".join([f'"{item}"' for item in path])
         return f"json_extract({column}, '$.{property_path_str}')"
-
-    def _json_contains_path(self, column: str, path: list[str]) -> str:
+    # 生成SQL表达式，检查JSON列是否包含特定路径。
+    def _json_contains_path(self, column: str, path: list[str]) -> str: 
         """
         Generates a SQL expression to check if a JSON column contains a specific path.
 
-        This method constructs a SQL query using SQLite's JSON functions to determine
+        This method constructs a SQL query using SQLite's JSON functions to determine   #此方法使用SQLite的JSON函数构建SQL查询，确定指定列中的JSON对象是否包含给定路径。路径表示为键列表，支持单级和嵌套路径。
         whether a JSON object in a specified column contains a given path. The path is
         represented as a list of keys, and the method supports both single-level and
-        nested paths.
+        nested paths.   
 
-        Args:
-            column (str): The name of the JSON column in the database table.
-            path (list[str]): A list of keys representing the JSON path to check.
+        Args:   
+            column (str): The name of the JSON column in the database table.   #数据库表中JSON列的名称。
+            path (list[str]): A list of keys representing the JSON path to check.   #表示要检查的JSON路径的键列表。
 
         Returns:
-            str: A SQL expression that evaluates to true if the specified path exists
+            str: A SQL expression that evaluates to true if the specified path exists   #如果指定路径存在于JSON列中，则返回TRUE。
                  in the JSON column.
 
         Example:
-            For a JSON column `json_column` and a path `['a', 'b', 'c']`, the method
+            For a JSON column `json_column` and a path `['a', 'b', 'c']`, the method   #对于名为json_column的JSON列和路径['a', 'b', 'c']，方法生成类似于以下内容的SQL查询：
             generates a SQL query similar to:
             ```
             EXISTS (
@@ -44,8 +44,8 @@ class CelToSqliteProvider(BaseCelToSqlProvider):
                 WHERE json_each.key = 'c'
             )
             ```
-        """
-        json_each_exp = None
+        """ 
+        json_each_exp = None 
         key_name = None
         if len(path) == 1:
             json_each_exp = f"json_each({column})"

@@ -78,6 +78,7 @@ class AlertDeduplicator:
             )
         )
         # the hash is the same as the last alert hash by fingerprint - full deduplication
+        # 如果当前告警的指纹和上次告警的指纹相同，并且当前告警的hash和上次告警的hash相同，则认为是完全重复的告警
         if (
             last_alerts_hash_by_fingerprint.get(alert.fingerprint)
             and last_alerts_hash_by_fingerprint.get(alert.fingerprint) == alert_hash
@@ -92,6 +93,7 @@ class AlertDeduplicator:
             )
             alert.isFullDuplicate = True
         # it means that there is another alert with the same fingerprint but different hash
+        # 如果当前告警的指纹和上次告警的指纹相同，但是当前告警的hash和上次告警的hash不同，则认为是部分重复的告警
         # so its a deduplication
         elif last_alerts_hash_by_fingerprint.get(alert.fingerprint):
             self.logger.info(

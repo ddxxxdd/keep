@@ -649,7 +649,7 @@ class ProvidersFactory:
     @staticmethod
     def get_default_deduplication_rules() -> list[DeduplicationRuleDto]:
         """
-        Get the default deduplications for all providers with FINGERPRINT_FIELDS.
+        Get the default deduplications for all providers with FINGERPRINT_FIELDS.   #获取所有具有FINGERPRINT_FIELDS的提供商的默认去重规则。
 
         Returns:
             list: The default deduplications for each provider.
