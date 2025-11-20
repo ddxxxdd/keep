@@ -238,7 +238,7 @@ class AlertDeduplicator:
 
         # if not, assign them the default full deduplication rule ignore fields
         self.logger.info(
-            "No full deduplication rule found, assigning default full deduplication rule ignore fields"
+            "No full deduplication rule found, assigning default full deduplication rule ignore fields" 
         )
         default_full_dedup_rule = self._get_default_full_deduplication_rule(
             provider_id=provider_id, provider_type=provider_type
