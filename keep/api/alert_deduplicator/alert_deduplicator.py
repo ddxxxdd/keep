@@ -123,15 +123,15 @@ class AlertDeduplicator:
         rules: list["DeduplicationRuleDto"] | None = None,
         last_alert_fingerprint_to_hash: dict[str, str] | None = None,
     ) -> bool:
-        # IMPOTRANT NOTE TO SOMEONE WORKING ON THIS CODE:
-        #   apply_deduplication runs AFTER _format_alert, so you can assume that alert fields are in the expected format.
-        #   you are also safe to assume that alert.fingerprint is set by the provider itself
+        # IMPOTRANT NOTE TO SOMEONE WORKING ON THIS CODE:   
+        #   apply_deduplication runs AFTER _format_alert, so you can assume that alert fields are in the expected format.    # 在 apply_deduplication 函数中，可以假设告警字段已经按照预期格式设置
+        #   you are also safe to assume that alert.fingerprint is set by the provider itself    # 也可以假设告警的指纹已经由提供者本身设置
 
-        # get only relevant rules
+        # get only relevant rules   # 获取相关的去重规则
         rules = rules or self.get_deduplication_rules(
             self.tenant_id, alert.providerId, alert.providerType
         )
-
+        # 遍历去重规则，应用去重规则
         for rule in rules:
             self.logger.debug(
                 "Applying deduplication rule to alert",
@@ -202,7 +202,7 @@ class AlertDeduplicator:
         # if not provider_type, force it to be "keep" so custom deduplication rule can be used
         if not provider_type:
             provider_type = "keep"
-
+        # 尝试从数据库中获取自定义的去重规则
         # try to get the rule from the database
         rule = (
             get_custom_deduplication_rule(tenant_id, provider_id, provider_type)
@@ -236,14 +236,15 @@ class AlertDeduplicator:
         if rule.full_deduplication:
             return [rule]
 
-        # if not, assign them the default full deduplication rule ignore fields
+        # if not, assign them the default full deduplication rule ignore fields 如果找不到完全去重规则，则分配默认的完全去重规则忽略字段
         self.logger.info(
             "No full deduplication rule found, assigning default full deduplication rule ignore fields" 
         )
+        # 获取默认的完全去重规则忽略字段
         default_full_dedup_rule = self._get_default_full_deduplication_rule(
             provider_id=provider_id, provider_type=provider_type
         )
-        rule.ignore_fields = default_full_dedup_rule.ignore_fields
+        rule.ignore_fields = default_full_dedup_rule.ignore_fields  # 将默认的完全去重规则忽略字段赋值给规则的忽略字段
         return [rule]
 
     def _generate_uuid(self, provider_id, provider_type):

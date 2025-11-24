@@ -31,7 +31,7 @@ class WorkflowManager:
     _instance: typing.Optional["WorkflowManager"] = None
 
     @staticmethod
-    def get_instance() -> "WorkflowManager":
+    def get_instance() -> "WorkflowManager":    # 获取工作流管理器实例
         if not WorkflowManager._instance:
             # We don't want to lock if the instance is already created
             with WorkflowManager._lock:
@@ -122,7 +122,7 @@ class WorkflowManager:
             )
 
     def insert_incident(self, tenant_id: str, incident: IncidentDto, trigger: str):
-        all_workflow_models = self.workflow_store.get_all_workflows(tenant_id)
+        all_workflow_models = self.workflow_store.get_all_workflows(tenant_id)  # 获取所有工作流
         self.logger.info(
             "Got all workflows",
             extra={

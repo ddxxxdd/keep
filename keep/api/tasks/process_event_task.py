@@ -140,7 +140,7 @@ def __save_to_db(
     try:
         # keep raw events in the DB if the user wants to
         # this is mainly for debugging and research purposes
-        if KEEP_STORE_RAW_ALERTS:
+        if KEEP_STORE_RAW_ALERTS:   # 如果用户想要保存原始的告警事件，则将原始的告警事件保存到 DB
             if isinstance(raw_events, dict):
                 raw_events = [raw_events]
 
@@ -155,8 +155,8 @@ def __save_to_db(
         enrichments_bl = EnrichmentsBl(tenant_id, session)
         # add audit to the deduplicated events
         # TODO: move this to the alert deduplicator
-        if KEEP_AUDIT_EVENTS_ENABLED:
-            for event in deduplicated_events:
+        if KEEP_AUDIT_EVENTS_ENABLED:    # 如果用户想要保存审计事件，则将审计事件保存到 DB
+            for event in deduplicated_events: 
                 audit = AlertAudit(
                     tenant_id=tenant_id,
                     fingerprint=event.fingerprint,
@@ -168,7 +168,7 @@ def __save_to_db(
                 session.add(audit)
 
                 __validate_last_received(event)
-                enrichments_bl.enrich_entity(
+                enrichments_bl.enrich_entity(  # 富化实体，设置告警的各个字段
                     event.fingerprint,
                     enrichments={"lastReceived": event.lastReceived},
                     dispose_on_new_alert=True,
@@ -177,8 +177,8 @@ def __save_to_db(
                     action_description="Alert lastReceived enriched on deduplication",
                 )
 
-        enriched_formatted_events = []
-        saved_alerts = []
+        enriched_formatted_events = []  # 创建一个空列表，用于存储富化后的告警事件
+        saved_alerts = []  # 创建一个空列表，用于存储保存的告警事件
 
         fingerprints = [event.fingerprint for event in formatted_events]
         started_at_for_fingerprints = get_started_at_for_alerts(
@@ -195,7 +195,7 @@ def __save_to_db(
                 formatted_event.startedAt = str(started_at)
 
             if KEEP_CALCULATE_START_FIRING_TIME_ENABLED:
-                # calculate startFiring time
+                # calculate startFiring time  # 计算告警的开始时间
                 previous_alert = get_alerts_by_fingerprint(
                     tenant_id=tenant_id,
                     fingerprint=formatted_event.fingerprint,
@@ -430,29 +430,29 @@ def __handle_formatted_events(
     with tracer.start_as_current_span("process_event_deduplication"):
         # 第二步，过滤掉重复的告警
         # second, filter out any deduplicated events    
-        alert_deduplicator = AlertDeduplicator(tenant_id)
-        deduplication_rules = alert_deduplicator.get_deduplication_rules(
+        alert_deduplicator = AlertDeduplicator(tenant_id)   # 创建一个去重对象，用于在整个处理任务中使用
+        deduplication_rules = alert_deduplicator.get_deduplication_rules(  # 获取去重规则
             tenant_id=tenant_id, provider_id=provider_id, provider_type=provider_type
         )
-        last_alerts_fingerprint_to_hash = get_last_alert_hashes_by_fingerprints(
+        last_alerts_fingerprint_to_hash = get_last_alert_hashes_by_fingerprints(  # 获取上次告警的指纹和hash
             tenant_id, [event.fingerprint for event in formatted_events]
         )
-        for event in formatted_events:
+        for event in formatted_events:  # 遍历格式化后的告警事件，应用去重规则
             # apply_deduplication set alert_hash and isDuplicate on event
-            event = alert_deduplicator.apply_deduplication(
+            event = alert_deduplicator.apply_deduplication(  # 应用去重规则，设置告警的hash和是否是重复的告警
                 event, deduplication_rules, last_alerts_fingerprint_to_hash
             )
 
         # filter out the deduplicated events
         deduplicated_events = list(
-            filter(lambda event: event.isFullDuplicate, formatted_events)
+            filter(lambda event: event.isFullDuplicate, formatted_events) 
         )
         formatted_events = list(
-            filter(lambda event: not event.isFullDuplicate, formatted_events)
+            filter(lambda event: not event.isFullDuplicate, formatted_events) 
         )
 
     with tracer.start_as_current_span("process_event_save_to_db"):
-        # save to db
+        # save to db    # 第三步，将告警添加到 DB
         enriched_formatted_events = __save_to_db(
             tenant_id,
             provider_type,
@@ -463,10 +463,10 @@ def __handle_formatted_events(
             provider_id,
             timestamp_forced,
         )
-
+    # 第四步，将告警的各个字段保存到 DB，以便在将来使用，如去重字段建议
     # let's save all fields to the DB so that we can use them in the future such in deduplication fields suggestions
     # todo: also use it on correlation rules suggestions
-    if KEEP_ALERT_FIELDS_ENABLED:
+    if KEEP_ALERT_FIELDS_ENABLED:    # 如果用户想要保存告警的各个字段，则将告警的各个字段保存到 DB
         with tracer.start_as_current_span("process_event_bulk_upsert_alert_fields"):
             for enriched_formatted_event in enriched_formatted_events:
                 logger.debug(
@@ -484,7 +484,7 @@ def __handle_formatted_events(
                     else:
                         fields.append(key)
 
-                bulk_upsert_alert_fields(
+                bulk_upsert_alert_fields(  # 将告警的各个字段保存到 DB
                     tenant_id=tenant_id,
                     fields=fields,
                     provider_id=enriched_formatted_event.providerId,
@@ -499,12 +499,12 @@ def __handle_formatted_events(
                         "alert_fingerprint": enriched_formatted_event.fingerprint,
                     },
                 )
-
+    # 第五步，将告警添加到 ElasticSearch
     # after the alert enriched and mapped, lets send it to the elasticsearch
     with tracer.start_as_current_span("process_event_push_to_elasticsearch"):
         elastic_client = ElasticClient(tenant_id=tenant_id)
-        if elastic_client.enabled:
-            for alert in enriched_formatted_events:
+        if elastic_client.enabled:      # 如果 ElasticSearch 配置了，则将告警添加到 ElasticSearch
+            for alert in enriched_formatted_events:  # 遍历富化后的告警事件，将告警添加到 ElasticSearch
                 try:
                     logger.debug(
                         "Pushing alert to elasticsearch",
@@ -513,7 +513,7 @@ def __handle_formatted_events(
                             "alert_fingerprint": alert.fingerprint,
                         },
                     )
-                    elastic_client.index_alert(
+                    elastic_client.index_alert(  # 将告警添加到 ElasticSearch
                         alert=alert,
                     )
                 except Exception:
@@ -527,9 +527,9 @@ def __handle_formatted_events(
                         },
                     )
                     continue
-
-    if MAINTENANCE_WINDOW_ALERT_STRATEGY == "recover_previous_status":
-        ignored_events = list(
+    # 如果维护窗口策略是恢复之前的状态，则将维护窗口内的告警事件添加到 ignored_events 列表中
+    if MAINTENANCE_WINDOW_ALERT_STRATEGY == "recover_previous_status":  
+        ignored_events = list( 
             filter(
                 lambda event: event.status == AlertStatus.MAINTENANCE.value,
                 enriched_formatted_events
@@ -541,15 +541,15 @@ def __handle_formatted_events(
                 enriched_formatted_events
             )
         )
-
+    # 第六步，将告警添加到工作流
     with tracer.start_as_current_span("process_event_push_to_workflows"):
         try:
             # Now run any workflow that should run based on this alert
             # TODO: this should publish event
-            workflow_manager = WorkflowManager.get_instance()
+            workflow_manager = WorkflowManager.get_instance()    # 获取工作流管理器实例
             # insert the events to the workflow manager process queue
             logger.info("Adding events to the workflow manager queue")
-            workflow_manager.insert_events(tenant_id, enriched_formatted_events)
+            workflow_manager.insert_events(tenant_id, enriched_formatted_events)    # 将告警添加到工作流管理器进程队列
             logger.info("Added events to the workflow manager queue")
         except Exception:
             logger.exception(
@@ -561,15 +561,15 @@ def __handle_formatted_events(
                     "tenant_id": tenant_id,
                 },
             )
-
+    # 第七步，运行规则引擎（用于将把零散告警聚合成事件）
     incidents = []
     with tracer.start_as_current_span("process_event_run_rules_engine"):
         # Now we need to run the rules engine
         if KEEP_CORRELATION_ENABLED:
             try:
-                rules_engine = RulesEngine(tenant_id=tenant_id)
+                rules_engine = RulesEngine(tenant_id=tenant_id)  # 获取规则引擎实例
                 # handle incidents, also handle workflow execution as
-                incidents: List[IncidentDto] = rules_engine.run_rules(
+                incidents: List[IncidentDto] = rules_engine.run_rules(  # 运行规则引擎，处理告警事件
                     enriched_formatted_events, session=session
                 )
             except Exception:
@@ -585,16 +585,16 @@ def __handle_formatted_events(
 
     if MAINTENANCE_WINDOW_ALERT_STRATEGY == "recover_previous_status":
         enriched_formatted_events.extend(ignored_events)
-
+    # 第八步，通知客户端
     with tracer.start_as_current_span("process_event_notify_client"):
-        pusher_client = get_pusher_client() if notify_client else None
+        pusher_client = get_pusher_client() if notify_client else None  # 获取Pusher客户端实例
         if not pusher_client:
-            return
+            return  
         # Get the notification cache
         pusher_cache = get_notification_cache()
 
         # Tell the client to poll alerts
-        if pusher_cache.should_notify(tenant_id, "poll-alerts"):
+        if pusher_cache.should_notify(tenant_id, "poll-alerts"):  # 如果客户端需要获取告警，则通知客户端
             try:
                 pusher_client.trigger(
                     f"private-{tenant_id}",
@@ -619,20 +619,20 @@ def __handle_formatted_events(
         # Now we need to update the presets
         # send with pusher
 
-        try:
-            presets = get_all_presets_dtos(tenant_id)
-            rules_engine = RulesEngine(tenant_id=tenant_id)
+        try:    
+            presets = get_all_presets_dtos(tenant_id)       # 获取所有预设
+            rules_engine = RulesEngine(tenant_id=tenant_id)  # 获取规则引擎实例
             presets_do_update = []
             for preset_dto in presets:
                 # filter the alerts based on the search query
-                filtered_alerts = rules_engine.filter_alerts(
+                filtered_alerts = rules_engine.filter_alerts(   # 过滤告警，根据搜索查询过滤告警
                     enriched_formatted_events, preset_dto.cel_query
                 )
                 # if not related alerts, no need to update
                 if not filtered_alerts:
                     continue
-                presets_do_update.append(preset_dto)
-            if pusher_cache.should_notify(tenant_id, "poll-presets"):
+                presets_do_update.append(preset_dto)    # 将需要更新的预设添加到 presets_do_update 列表中
+            if pusher_cache.should_notify(tenant_id, "poll-presets"):  # 如果客户端需要获取预设，则通知客户端
                 try:
                     pusher_client.trigger(
                         f"private-{tenant_id}",
@@ -721,7 +721,7 @@ def process_event(
                     provider_class = ProvidersFactory.get_provider_class("keep")
 
         # 如果event是列表，则遍历列表中的每个元素，如果元素不是AlertDto，则调用provider_class.format_alert方法，将元素转换为AlertDto，否则直接添加到event_list中，最后将event_list赋值给event
-                if isinstance(event, list): 
+                if isinstance(event, list):
                     event_list = []  # 创建一个空列表，用于存储转换后的AlertDto
                     for event_item in event:
                         if not isinstance(event_item, AlertDto):  # 如果元素不是AlertDto，则调用provider_class.format_alert方法，将元素转换为AlertDto
