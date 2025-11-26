@@ -21,12 +21,12 @@ logger = logging.getLogger(__name__)
 def get_fingerprint(fingerprint, values):
     # if its none, use the name
     if fingerprint is None:
-        fingerprint_payload = values.get("name")
+        fingerprint_payload = values.get("name")    # 获取告警名称
         # if the alert name is None, than use the entire payload
         if not fingerprint_payload:
             logger.warning("No name to alert, using the entire payload")
-            fingerprint_payload = json.dumps(values)
-        fingerprint = hashlib.sha256(fingerprint_payload.encode()).hexdigest()
+            fingerprint_payload = json.dumps(values)    # 将值转换为JSON字符串
+        fingerprint = hashlib.sha256(fingerprint_payload.encode()).hexdigest()    # 计算哈希
     # take only the first 255 characters
     else:
         fingerprint = fingerprint[:255]

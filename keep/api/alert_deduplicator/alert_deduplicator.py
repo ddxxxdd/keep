@@ -52,25 +52,25 @@ class AlertDeduplicator:
         Apply a deduplication rule to an alert.
 
         Gets an alert and a deduplication rule and apply the rule to the alert by:
-        - removing the fields that should be ignored
-        - calculating the hash
-        - checking if the hash is already in the database
-        - setting the isFullDuplicate or isPartialDuplicate flag
-        """
+        - removing the fields that should be ignored    # 删除应该忽略的字段
+        - calculating the hash    # 计算哈希
+        - checking if the hash is already in the database    # 检查哈希是否已经在数据库中
+        - setting the isFullDuplicate or isPartialDuplicate flag    # 设置isFullDuplicate或isPartialDuplicate标志
+        """ 
         # we don't want to remove fields from the original alert
         alert_copy = copy.deepcopy(alert)
         # remove the fields that should be ignored
-        for field in rule.ignore_fields:
+        for field in rule.ignore_fields:  # 删除应该忽略的字段
             alert_copy = self._remove_field(field, alert_copy)
 
-        # calculate the hash
+        # calculate the hash    # 计算哈希
         alert_hash = hashlib.sha256(
             json.dumps(alert_copy.dict(), default=str, sort_keys=True).encode()
         ).hexdigest()
         alert.alert_hash = alert_hash
-        # Check if the hash is already in the database.
-        # If last_alert_fingerprint_to_hash is provided, use it
-        # else, get the hash from the database
+        # Check if the hash is already in the database.    # 检查哈希是否已经在数据库中
+        # If last_alert_fingerprint_to_hash is provided, use it    # 如果last_alert_fingerprint_to_hash提供，则使用它
+        # else, get the hash from the database    # 否则，从数据库中获取哈希
         last_alerts_hash_by_fingerprint = (
             last_alert_fingerprint_to_hash
             or get_last_alert_hashes_by_fingerprints(

@@ -95,15 +95,15 @@ class WorkflowManager:
             if isinstance(filter_val, bool) and isinstance(value, str):
                 return value == str(filter_val)
             return value == filter_val
-
-    def _get_workflow_from_store(self, tenant_id, workflow_model):
+   
+    def _get_workflow_from_store(self, tenant_id, workflow_model):  # 从存储中获取工作流
         try:
-            # get the actual workflow that can be triggered
+            # get the actual workflow that can be triggered  # 获取可以触发的工作流
             self.logger.info("Getting workflow from store")
-            workflow = self.workflow_store.get_workflow(tenant_id, workflow_model.id)
+            workflow = self.workflow_store.get_workflow(tenant_id, workflow_model.id)  # 获取工作流
             self.logger.info("Got workflow from store")
             return workflow
-        except ProviderConfigurationException:
+        except ProviderConfigurationException:  # 如果工作流提供者未配置，则跳过
             self.logger.warning(
                 "Workflow have a provider that is not configured",
                 extra={
@@ -120,34 +120,33 @@ class WorkflowManager:
                     "tenant_id": tenant_id,
                 },
             )
-
+    # 在有Incident触发工作流时被调用的入口，用来把符合条件的事件型工作流塞进调度队列
     def insert_incident(self, tenant_id: str, incident: IncidentDto, trigger: str):
-        all_workflow_models = self.workflow_store.get_all_workflows(tenant_id)  # 获取所有工作流
+        all_workflow_models = self.workflow_store.get_all_workflows(tenant_id)  
         self.logger.info(
             "Got all workflows",
             extra={
                 "num_of_workflows": len(all_workflow_models),
             },
         )
-        for workflow_model in all_workflow_models:
+        for workflow_model in all_workflow_models:  # 遍历所有工作流
 
-            if workflow_model.is_disabled:
+            if workflow_model.is_disabled:  # 如果工作流被禁用，则跳过
                 self.logger.debug(
                     f"Skipping the workflow: id={workflow_model.id}, name={workflow_model.name}, "
                     f"tenant_id={workflow_model.tenant_id} - Workflow is disabled."
                 )
                 continue
-            workflow = self._get_workflow_from_store(tenant_id, workflow_model)
-            if workflow is None:
+            workflow = self._get_workflow_from_store(tenant_id, workflow_model)  # 获取工作流
+            if workflow is None:  # 如果工作流不存在，则跳过
                 continue
-
-            # Using list comprehension instead of pandas flatten() for better performance
-            # and to avoid pandas dependency
-            # @tb: I removed pandas so if we'll have performance issues we can revert to pandas
-            incident_triggers = [
+            # Using list comprehension instead of pandas flatten() for better performance   # 使用列表推导式代替pandas的flatten()，以提高性能并避免pandas依赖
+            # and to avoid pandas dependency  # 并避免pandas依赖
+            # @tb: I removed pandas so if we'll have performance issues we can revert to pandas     # 如果性能问题，可以 revert to pandas
+            incident_triggers = [  # 获取工作流的事件触发器
                 event
-                for trigger in workflow.workflow_triggers
-                if trigger["type"] == "incident"
+                for trigger in workflow.workflow_triggers  # 遍历工作流的事件触发器
+                if trigger["type"] == "incident"     # 如果触发器类型为事件，则获取事件
                 for event in trigger.get("events", [])
             ]
 
@@ -157,14 +156,14 @@ class WorkflowManager:
                 )
                 continue
 
-            incident_enrichment = get_enrichment(tenant_id, str(incident.id))
+            incident_enrichment = get_enrichment(tenant_id, str(incident.id))  # 获取事件增强数据
             if incident_enrichment:
                 for k, v in incident_enrichment.enrichments.items():
-                    setattr(incident, k, v)
-
+                    setattr(incident, k, v)  # 设置事件增强数据
+        
             self.logger.info("Adding workflow to run")
-            with self.scheduler.lock:
-                self.scheduler.workflows_to_run.append(
+            with self.scheduler.lock:  # 获取调度锁
+                self.scheduler.workflows_to_run.append(  # 将工作流添加到调度队列
                     {
                         "workflow": workflow,
                         "workflow_id": workflow_model.id,
@@ -305,7 +304,7 @@ class WorkflowManager:
                     continue
 
                 for trigger in workflow.workflow_triggers:
-                    # If the trigger is not an alert, it's not relevant for this event.
+                    # If the trigger is not an alert, it's not relevant for this event. # 如果触发器类型不是告警，则跳过
                     if not trigger.get("type") == "alert":
                         self.logger.debug(
                             "Trigger type is not alert, skipping",
@@ -317,7 +316,7 @@ class WorkflowManager:
                         )
                         continue
 
-                    if "filters" not in trigger and "cel" not in trigger:
+                    if "filters" not in trigger and "cel" not in trigger:  # 如果触发器没有filters或cel，则跳过
                         self.logger.warning(
                             "Trigger is missing filters or cel",
                             extra={
@@ -331,12 +330,12 @@ class WorkflowManager:
 
                         # By default, the workflow should not run. Only if the CEL evaluates to true, the workflow will run.
                         should_run = False
-
-                        # backward compatibility for filter. should be removed in the future
-                        # if triggers and cel are set, we override the cel with filters.
+                        # 如果触发器有filters，则转换为CEL
+                        # backward compatibility for filter. should be removed in the future    # 向后兼容过滤器。应该在未来删除
+                        # if triggers and cel are set, we override the cel with filters.  # 如果触发器和cel都设置，我们覆盖cel为filters
                         if "filters" in trigger:
                             try:
-                                # this is old format, so let's convert it to CEL
+                                # this is old format, so let's convert it to CEL    # 这是旧格式，所以让我们转换为CEL
                                 trigger["cel"] = self._convert_filters_to_cel(
                                     trigger["filters"]
                                 )
@@ -351,8 +350,8 @@ class WorkflowManager:
                                 )
                                 continue
 
-                        cel = trigger.get("cel", "")
-                        if not cel:
+                        cel = trigger.get("cel", "")    # 获取CEL表达式
+                        if not cel:  # 如果CEL表达式为空，则跳过
                             self.logger.warning(
                                 "Trigger is missing cel",
                                 extra={
@@ -363,7 +362,7 @@ class WorkflowManager:
                             )
                             continue
 
-                        # source is a special case which can be used as string comparison although it is a list
+                        # source is a special case which can be used as string comparison although it is a list    # source是一个特殊情况，可以用于字符串比较，尽管它是一个列表
                         if "source" in cel:
                             try:
                                 self.logger.info(
@@ -389,10 +388,10 @@ class WorkflowManager:
                                     },
                                 )
                                 continue
-
+                        # 预处理CEL表达式，以处理严重性比较 properly
                         # Preprocess the CEL expression to handle severity comparisons properly
                         try:
-                            cel = preprocess_cel_expression(cel)
+                            cel = preprocess_cel_expression(cel)    # 预处理CEL表达式
                             self.logger.debug(
                                 "Preprocessed CEL expression",
                                 extra={
@@ -414,8 +413,8 @@ class WorkflowManager:
                             )
                             continue
 
-                        compiled_ast = self.cel_environment.compile(cel)
-                        program = self.cel_environment.program(compiled_ast)
+                        compiled_ast = self.cel_environment.compile(cel)    # 编译CEL表达式
+                        program = self.cel_environment.program(compiled_ast)    # 生成程序
 
                         # Convert event to dict and normalize severity for CEL evaluation
                         event_payload = event.dict()
@@ -431,7 +430,7 @@ class WorkflowManager:
 
                         activation = celpy.json_to_cel(event_payload)
                         try:
-                            should_run = program.evaluate(activation)
+                            should_run = program.evaluate(activation)    # 评估CEL表达式
                         except celpy.evaluation.CELEvalError as e:
                             self.logger.exception(
                                 "Error evaluating CEL for event in insert_events",
@@ -447,7 +446,7 @@ class WorkflowManager:
                             )
                             continue
 
-                    if bool(should_run) is False:
+                    if bool(should_run) is False:  # 如果CEL表达式评估为False，则跳过
                         self.logger.debug(
                             "Workflow should not run, skipping",
                             extra={
@@ -465,20 +464,20 @@ class WorkflowManager:
                     event.trigger = "alert"
                     # prepare the alert with the enrichment
                     self.logger.info("Enriching alert")
-                    alert_enrichment = get_enrichment(tenant_id, event.fingerprint)
+                    alert_enrichment = get_enrichment(tenant_id, event.fingerprint)    # 获取事件增强数据
                     if alert_enrichment:
                         for k, v in alert_enrichment.enrichments.items():
                             setattr(event, k, v)
                     self.logger.info("Alert enriched")
-                    # apply only_on_change (https://github.com/keephq/keep/issues/801)
-                    fields_that_needs_to_be_change = trigger.get("only_on_change", [])
-                    severity_changed = trigger.get("severity_changed", False)
+                    # apply only_on_change (https://github.com/keephq/keep/issues/801)  
+                    fields_that_needs_to_be_change = trigger.get("only_on_change", [])    # 获取需要改变的字段
+                    severity_changed = trigger.get("severity_changed", False)    # 获取严重性是否改变
                     # if there are fields that needs to be changed, get the previous alert
-                    if fields_that_needs_to_be_change or severity_changed:
-                        previous_alert = get_previous_alert_by_fingerprint(
+                    if fields_that_needs_to_be_change or severity_changed:  # 如果需要改变的字段或严重性改变，则获取上一个告警
+                        previous_alert = get_previous_alert_by_fingerprint(  # 获取上一个告警
                             tenant_id, event.fingerprint
                         )
-                        if severity_changed:
+                        if severity_changed:  # 如果严重性改变，则添加严重性字段
                             fields_that_needs_to_be_change.append("severity")
                         # now compare:
                         #   (no previous alert means that the workflow should run)
@@ -567,7 +566,7 @@ class WorkflowManager:
                             )
                     """
                     with self.scheduler.lock:
-                        self.scheduler.workflows_to_run.append(
+                        self.scheduler.workflows_to_run.append(  # 将工作流添加到调度队列
                             {
                                 "workflow": workflow,
                                 "workflow_id": workflow_model.id,

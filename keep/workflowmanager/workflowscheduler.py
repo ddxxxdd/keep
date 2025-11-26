@@ -104,12 +104,12 @@ class WorkflowScheduler:
                 workflow_queue_size.labels(tenant_id=tenant_id).set(
                     len(self.workflows_to_run)
                 )
-
+    # 启动工作流调度器
     async def start(self):
         self.logger.info("Starting workflows scheduler")
         # Shahar: fix for a bug in unit tests
         self._stop = False
-        self.scheduler_future = self.executor.submit(self._start)
+        self.scheduler_future = self.executor.submit(self._start)    # 提交启动工作流调度器任务
         self.logger.info("Workflows scheduler started")
 
     def _handle_interval_workflows(self):
@@ -121,7 +121,7 @@ class WorkflowScheduler:
 
         try:
             # get all workflows that should run due to interval
-            workflows = get_workflows_that_should_run()
+            workflows = get_workflows_that_should_run()    # 获取所有应该运行的工作流
         except Exception as ex:
             self.logger.warning(
                 "Error getting workflows that should run",
@@ -144,7 +144,7 @@ class WorkflowScheduler:
                         "tenant_id": tenant_id,
                     },
                 )
-                self._finish_workflow_execution(
+                self._finish_workflow_execution(  # 完成工作流执行
                     tenant_id=tenant_id,
                     workflow_id=workflow_id,
                     workflow_execution_id=workflow_execution_id,
@@ -171,7 +171,7 @@ class WorkflowScheduler:
                 )
                 continue
 
-            future = self.executor.submit(
+            future = self.executor.submit(  # 提交运行工作流任务
                 self._run_workflow,
                 tenant_id,
                 workflow_id,
@@ -408,7 +408,7 @@ class WorkflowScheduler:
     def _handle_event_workflows(self):
         # TODO - event workflows should be in DB too, to avoid any state problems.
 
-        # take out all items from the workflows to run and run them, also, clean the self.workflows_to_run list
+        # take out all items from the workflows to run and run them, also, clean the self.workflows_to_run list  # 取出所有工作流并运行它们，同时清理self.workflows_to_run列表
         with self.lock:
             workflows_to_run, self.workflows_to_run = self.workflows_to_run, []
         for workflow_to_run in workflows_to_run:
@@ -629,7 +629,7 @@ class WorkflowScheduler:
                     continue
             # Last, run the workflow
             inputs = workflow_to_run.get("inputs", {})
-            future = self.executor.submit(
+            future = self.executor.submit(  # 提交运行工作流任务
                 self._run_workflow,
                 tenant_id,
                 workflow_id,
@@ -638,7 +638,7 @@ class WorkflowScheduler:
                 event,
                 inputs,
             )
-            self.futures.add(future)
+            self.futures.add(future)    
             future.add_done_callback(lambda f: self.futures.remove(f))
 
         self.logger.debug(
@@ -647,7 +647,7 @@ class WorkflowScheduler:
         )
 
     def _start(self):
-        RUN_TIMEOUT_CHECKS_EVERY = 100
+        RUN_TIMEOUT_CHECKS_EVERY = 100  # 每100次迭代检查一次超时工作流
         self.logger.info("Starting workflows scheduler")
         runs = 0
         while not self._stop:
@@ -658,10 +658,10 @@ class WorkflowScheduler:
                 extra={"current_number_of_workflows": len(self.futures)},
             )
             try:
-                self._handle_interval_workflows()
-                self._handle_event_workflows()
+                self._handle_interval_workflows()    # 处理间隔型工作流
+                self._handle_event_workflows()    # 处理事件型工作流
                 if runs % RUN_TIMEOUT_CHECKS_EVERY == 0:
-                    self._timeout_workflows()
+                    self._timeout_workflows()    # 检查超时工作流
             except Exception:
                 # This is the "mainloop" of the scheduler, we don't want to crash it
                 # But any exception here should be investigated

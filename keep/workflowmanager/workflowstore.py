@@ -148,16 +148,16 @@ class WorkflowStore:
                 detail=f"Workflow {workflow_id} not found",
             )
         return self.format_workflow_yaml(workflow.workflow_raw)
-
+    # 从存储中获取工作流
     def get_workflow(self, tenant_id: str, workflow_id: str) -> Workflow:
-        workflow = get_workflow_by_id(tenant_id, workflow_id)
+        workflow = get_workflow_by_id(tenant_id, workflow_id)   # 从存储中获取工作流
         if not workflow:
             raise HTTPException(
                 status_code=404,
                 detail=f"Workflow {workflow_id} not found",
             )
-        workflow_yaml = cyaml.safe_load(workflow.workflow_raw)
-        workflow = self.parser.parse(
+        workflow_yaml = cyaml.safe_load(workflow.workflow_raw)  # 加载工作流
+        workflow = self.parser.parse(  # 解析工作流
             tenant_id,
             workflow_yaml,
             workflow_db_id=workflow.id,

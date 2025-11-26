@@ -875,7 +875,7 @@ def get_workflow_by_name(tenant_id: str, workflow_name: str):
     return workflow
 
 
-def get_workflow_by_id(tenant_id: str, workflow_id: str):
+def get_workflow_by_id(tenant_id: str, workflow_id: str):  # 从存储中获取工作流
     with Session(engine) as session:
         workflow = session.exec(
             select(Workflow)
