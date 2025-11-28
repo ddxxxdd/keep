@@ -14,8 +14,9 @@ scrape_configs:
     static_configs:
       - targets: [ 'otel-collector:9100' ]
 
-rule_files:
-  - /etc/rules.yml
+# rule_files:
+#   - /etc/rules.yml
+# 注释掉 rules.yml（使用异常检测替代静态阈值规则）
 
 alerting:
   alertmanagers:

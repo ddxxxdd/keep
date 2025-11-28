@@ -37,7 +37,7 @@ services:
       - --enable-feature=exemplar-storage
     volumes:
       - ./otel-shared/prometheus.yaml:/etc/prometheus.yaml
-      - ./otel-shared/rules.yml:/etc/rules.yml
+      # - ./otel-shared/rules.yml:/etc/rules.yml
       - ./prometheus-data:/prometheus   # 持久化数据
     ports:
       - "9090:9090"
@@ -124,6 +124,48 @@ services:
     extends:
       file: docker-compose.common.yml
       service: keep-websocket-server-common
+
+  # 异常检测后台服务 - 自动检测 Prometheus 指标异常
+  keep-anomaly-detector:
+    build:
+      dockerfile: docker/Dockerfile.dev.api
+    # 不继承 keep-backend-common，避免端口冲突
+    # 只继承环境变量配置
+    environment:
+      - PORT=8080
+      - SECRET_MANAGER_TYPE=FILE
+      - SECRET_MANAGER_DIRECTORY=/state
+      - DATABASE_CONNECTION_STRING=sqlite:////state/db.sqlite3?check_same_thread=False
+      - OPENAI_API_KEY=$OPENAI_API_KEY
+      - PUSHER_APP_ID=1
+      - PUSHER_APP_KEY=keepappkey
+      - PUSHER_APP_SECRET=keepappsecret
+      - PUSHER_HOST=keep-websocket-server
+      - PUSHER_PORT=6001
+      - USE_NGROK=false
+      # Keep API 配置
+      - KEEP_API_URL=http://keep-backend-dev:8080
+      - KEEP_API_KEY=a71985bb-518b-40cf-8100-1686fae889e8
+      # Prometheus 配置（使用同一个网络中的 Prometheus）
+      - PROMETHEUS_URL=http://prometheus:9090
+      # 异常检测配置
+      - ANOMALY_DETECTOR_ENABLED=true
+      - ANOMALY_DETECTOR_INTERVAL=30
+      - ANOMALY_DETECTOR_MIN_DATA_POINTS=5
+      - ANOMALY_DETECTOR_ALGORITHM=both
+      - ANOMALY_DETECTOR_CONTAMINATION=0.2
+      - ANOMALY_DETECTOR_ZSCORE_THRESHOLD=1.5
+      - ANOMALY_DETECTOR_QUERY_STEP=15s
+      - ANOMALY_DETECTOR_INCLUDE_METRICS=prometheus_http_requests_total
+    command: ["python", "-m", "keep.server_jobs_bg"]
+    volumes:
+      - .:/app
+      - ./state:/state
+    depends_on:
+      - keep-backend-dev
+      - prometheus
+    profiles:
+      - otel
 
   log_collector:
     image: timberio/vector:0.32.2-debian
