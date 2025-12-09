@@ -22,7 +22,7 @@ from typing import Optional
 import requests
 
 
-def send_request(url: str, timeout: float = 1.0) -> bool:
+def send_request(url: str, timeout: float = 3.0) -> bool:
     try:
         response = requests.get(url, timeout=timeout)
         return response.status_code == 200
@@ -55,7 +55,7 @@ def spike(url: str, batch_size: int, concurrency: int, duration: int):
                 f"({total_success} successful)",
                 end="\r"
             )
-            time.sleep(1)
+            # time.sleep(1)
     print(f"\nSpike completed: {total_success}/{total_requests} successful requests")
 
 

@@ -16,6 +16,20 @@ class PrometheusConfig:
 
 
 @dataclass
+class TempoConfig:
+    """Configuration for Tempo (traces) connection."""
+    url: str = field(default_factory=lambda: os.environ.get("TEMPO_URL", "http://tempo:3200"))
+    enabled: bool = field(default_factory=lambda: os.environ.get("ANOMALY_DETECTOR_TRACES_ENABLED", "false").lower() == "true")
+
+
+@dataclass
+class LokiConfig:
+    """Configuration for Loki (logs) connection."""
+    url: str = field(default_factory=lambda: os.environ.get("LOKI_URL", "http://loki:3100"))
+    enabled: bool = field(default_factory=lambda: os.environ.get("ANOMALY_DETECTOR_LOGS_ENABLED", "false").lower() == "true")
+
+
+@dataclass
 class AnomalyDetectorConfig:
     """Configuration for the Anomaly Detector Service."""
     
@@ -73,6 +87,11 @@ class AnomalyDetectorConfig:
         ]
     )
     
+    # Rate change threshold (e.g., 0.5 = +50% vs baseline)
+    rate_change_threshold: float = field(
+        default_factory=lambda: float(os.environ.get("ANOMALY_DETECTOR_RATE_CHANGE_THRESHOLD", "0.5"))
+    )
+    
     # Keep API URL for posting alerts
     keep_api_url: str = field(
         default_factory=lambda: os.environ.get("KEEP_API_URL", "http://localhost:8080")
@@ -100,6 +119,12 @@ class AnomalyDetectorConfig:
     
     # Prometheus config
     prometheus: PrometheusConfig = field(default_factory=PrometheusConfig)
+    
+    # Tempo (traces) config
+    tempo: TempoConfig = field(default_factory=TempoConfig)
+    
+    # Loki (logs) config
+    loki: LokiConfig = field(default_factory=LokiConfig)
 
 
 def get_config() -> AnomalyDetectorConfig:

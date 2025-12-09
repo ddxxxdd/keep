@@ -150,13 +150,24 @@ services:
       - PROMETHEUS_URL=http://prometheus:9090
       # 异常检测配置
       - ANOMALY_DETECTOR_ENABLED=true
-      - ANOMALY_DETECTOR_INTERVAL=30
-      - ANOMALY_DETECTOR_MIN_DATA_POINTS=5
-      - ANOMALY_DETECTOR_ALGORITHM=both
-      - ANOMALY_DETECTOR_CONTAMINATION=0.2
-      - ANOMALY_DETECTOR_ZSCORE_THRESHOLD=1.5
+      - ANOMALY_DETECTOR_TRACES_ENABLED=true
+      - ANOMALY_DETECTOR_LOGS_ENABLED=true
+      - TEMPO_URL=http://tempo:3200
+      - LOKI_URL=http://loki:3100
+      - ANOMALY_DETECTOR_INTERVAL=15
+      - ANOMALY_DETECTOR_MIN_DATA_POINTS=80       # 更多点建立稳定基线，减少重启噪声
+      - ANOMALY_DETECTOR_ALGORITHM=zscore
+      - ANOMALY_DETECTOR_CONTAMINATION=0.005
+      - ANOMALY_DETECTOR_ZSCORE_THRESHOLD=2.5
       - ANOMALY_DETECTOR_QUERY_STEP=15s
-      - ANOMALY_DETECTOR_INCLUDE_METRICS=prometheus_http_requests_total
+      - ANOMALY_DETECTOR_QUERY_RANGE=3600          # 查询最近1小时的数据
+      - ANOMALY_DETECTOR_RATE_CHANGE_THRESHOLD=0.1   # 环比阈值 +10%，更敏感，能检测到故障注入
+      # 显式包含高 CPU / 请求时延相关指标，避免自动发现被截断
+      # 仅监控故障注入相关的少量指标（请求量/耗时、ad CPU）
+      - ANOMALY_DETECTOR_INCLUDE_METRICS=keep_http_client_duration_count,keep_http_server_request_duration_count,keep_jvm_cpu_recent_utilization,keep_process_cpu_seconds_total,keep_process_cpu_time
+      # 收紧排除规则，避免系统/导出器噪声
+      - ANOMALY_DETECTOR_EXCLUDE_METRICS=^go_.*,^cpython_.*,^promhttp_.*
+      - ANOMALY_DETECTOR_FALLBACK_METRICS=
     command: ["python", "-m", "keep.server_jobs_bg"]
     volumes:
       - .:/app
