@@ -12,6 +12,7 @@ services:
       - PUSHER_HOST=localhost
       - PUSHER_PORT=6001
       - PUSHER_APP_KEY=keepappkey
+      - OPENAI_API_KEY=$OPENAI_API_KEY
 
   keep-backend-common:
     ports:
@@ -22,6 +23,8 @@ services:
       - SECRET_MANAGER_DIRECTORY=/state
       - DATABASE_CONNECTION_STRING=sqlite:////state/db.sqlite3?check_same_thread=False
       - OPENAI_API_KEY=$OPENAI_API_KEY
+      - OPENAI_MODEL_NAME=$OPENAI_MODEL_NAME
+      - OPENAI_BASE_URL=$OPENAI_BASE_URL
       - PUSHER_APP_ID=1
       - PUSHER_APP_KEY=keepappkey
       - PUSHER_APP_SECRET=keepappsecret

@@ -4,7 +4,7 @@ import logging
 import uuid
 from typing import Dict, List, Optional, Set, Tuple
 from uuid import UUID
-
+import os
 from fastapi import HTTPException
 from openai import OpenAI, OpenAIError
 from sqlmodel import Session
@@ -36,7 +36,10 @@ class AISuggestionBl:
         # Todo: also goes with settings page
         #       https://github.com/keephq/keep/issues/2365
         try:
-            self._client = OpenAI()
+            self._client = OpenAI(
+                api_key=os.environ.get("OPENAI_API_KEY"),
+                base_url=os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1",
+            )
         except OpenAIError as e:
             # if its api key error, we should raise 400
             self.logger.error(f"Failed to initialize OpenAI client: {e}")

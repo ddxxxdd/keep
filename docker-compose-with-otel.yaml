@@ -150,23 +150,26 @@ services:
       - PROMETHEUS_URL=http://prometheus:9090
       # 异常检测配置
       - ANOMALY_DETECTOR_ENABLED=true
-      - ANOMALY_DETECTOR_TRACES_ENABLED=true
-      - ANOMALY_DETECTOR_LOGS_ENABLED=true
-      - TEMPO_URL=http://tempo:3200
-      - LOKI_URL=http://loki:3100
-      - ANOMALY_DETECTOR_INTERVAL=15
-      - ANOMALY_DETECTOR_MIN_DATA_POINTS=80       # 更多点建立稳定基线，减少重启噪声
+      - ANOMALY_DETECTOR_TRACES_ENABLED=false
+      - ANOMALY_DETECTOR_LOGS_ENABLED=false
+      # *** 异常检测核心配置 ***
+      # 缩短检测周期到 30 秒
+      - ANOMALY_DETECTOR_INTERVAL=30
+      # 缩短预热点数到 10 个，更快开始检测 (30s * 10 = 5分钟预热)
+      - ANOMALY_DETECTOR_MIN_DATA_POINTS=10
+      # 强制使用 Z-Score 算法，它对基线为零的突变最敏感
       - ANOMALY_DETECTOR_ALGORITHM=zscore
       - ANOMALY_DETECTOR_CONTAMINATION=0.005
-      - ANOMALY_DETECTOR_ZSCORE_THRESHOLD=2.5
+      # 降低 Z-Score 阈值，从默认 3.0 降到 2.0，提高灵敏度
+      - ANOMALY_DETECTOR_ZSCORE_THRESHOLD=2.0
       - ANOMALY_DETECTOR_QUERY_STEP=15s
-      - ANOMALY_DETECTOR_QUERY_RANGE=3600          # 查询最近1小时的数据
-      - ANOMALY_DETECTOR_RATE_CHANGE_THRESHOLD=0.1   # 环比阈值 +10%，更敏感，能检测到故障注入
-      # 显式包含高 CPU / 请求时延相关指标，避免自动发现被截断
-      # 仅监控故障注入相关的少量指标（请求量/耗时、ad CPU）
-      - ANOMALY_DETECTOR_INCLUDE_METRICS=keep_http_client_duration_count,keep_http_server_request_duration_count,keep_jvm_cpu_recent_utilization,keep_process_cpu_seconds_total,keep_process_cpu_time
-      # 收紧排除规则，避免系统/导出器噪声
-      - ANOMALY_DETECTOR_EXCLUDE_METRICS=^go_.*,^cpython_.*,^promhttp_.*
+      - ANOMALY_DETECTOR_QUERY_RANGE=1800          # 查询最近30分钟的数据
+      - ANOMALY_DETECTOR_RATE_CHANGE_THRESHOLD=0.3   # 环比阈值 +30%，更敏感，能检测到故障注入
+      # 显式只监控 HTTP 请求相关指标（匹配所有包含 http_server 和 request 的指标）
+      # 更通用的匹配，涵盖 keep 前端/flagd 的 HTTP 请求桶/计数/总和
+      - ANOMALY_DETECTOR_INCLUDE_METRICS=.*keep_http_server_duration.*
+      # 清空排除列表，确保关键指标不会被过滤
+      - ANOMALY_DETECTOR_EXCLUDE_METRICS=.*keep_http_server_duration.*{service_name!="frontend"}
       - ANOMALY_DETECTOR_FALLBACK_METRICS=
     command: ["python", "-m", "keep.server_jobs_bg"]
     volumes:
