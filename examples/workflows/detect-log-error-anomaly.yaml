@@ -1,0 +1,32 @@
+workflow:
+  id: detect-log-error-anomaly
+  name: Detect Log Error Anomaly
+  description: 检测错误日志速率异常，当错误日志速率突增时发送告警
+  triggers:
+    - type: manual
+  steps:
+    - name: detect-log-anomalies
+      provider:
+        type: anomaly_detector
+        config: "{{ providers.anomaly-detector-prod }}"
+        with:
+          data_source: "loki"
+          metric: 'sum(rate({job="varlogs", level="error"}[5m]))'
+          time_range: "1h"
+  actions:
+    - name: alert-on-error-spike
+      condition: "{{ steps.detect-log-anomalies.status == 'success' and steps.detect-log-anomalies.anomaly_count > 0 }}"
+      provider:
+        type: slack
+        config: "{{ providers.slack }}"
+        with:
+          message: |
+            检测到错误日志速率异常！
+            
+            查询: {{ steps.detect-log-anomalies.query }}
+            数据源: {{ steps.detect-log-anomalies.data_source }}
+            异常数量: {{ steps.detect-log-anomalies.anomaly_count }}
+            平均错误速率: {{ steps.detect-log-anomalies.mean }}/s
+            
+            请检查应用日志以确定错误原因。
+

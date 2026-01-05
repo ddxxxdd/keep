@@ -5,22 +5,30 @@ import requests
 
 from keep.api.core.demo_mode import launch_demo_mode_thread
 from keep.api.core.report_uptime import launch_uptime_reporting_thread
-from keep.anomaly_detector.anomaly_detector_service import launch_anomaly_detector_thread
 
 logger = logging.getLogger(__name__)
 
 
 def main():
+    """
+    后台任务启动入口。
+
+    目前仅包含：
+    - Demo 模式数据上报线程
+    - Uptime 上报线程
+
+    异常检测功能已经改为通过自定义 Provider 使用，不再在这里以独立服务形式启动。
+    """
     logger.info("Starting background server jobs.")
 
-    # Use KEEP_API_URL if set (for containerized environments), otherwise use localhost
+    # 优先使用 KEEP_API_URL（容器环境），否则回退到本地端口
     keep_api_url = os.environ.get("KEEP_API_URL")
     if not keep_api_url:
-        # We intentionally don't use KEEP_API_URL here to avoid going through the internet.
-        # Script should be launched in the same environment as the server.
+        # 不通过公网，而是在同一运行环境内直接访问本地服务
         keep_api_url = "http://localhost:" + str(os.environ.get("PORT", 8080))
     keep_api_key = os.environ.get("KEEP_LIVE_DEMO_MODE_API_KEY")
 
+    # 等待 API 服务可用
     while True:
         try:
             logger.info(f"Checking if server is up at {keep_api_url}...")
@@ -34,15 +42,9 @@ def main():
     threads = []
     threads.append(launch_demo_mode_thread(keep_api_url, keep_api_key))
     threads.append(launch_uptime_reporting_thread())
-    
-    # Launch the Anomaly Detector Service
-    # This service automatically detects anomalies in Prometheus metrics
-    # Configure with environment variables: ANOMALY_DETECTOR_ENABLED, PROMETHEUS_URL, etc.
-    logger.info("Launching Anomaly Detector Service...")
-    threads.append(launch_anomaly_detector_thread())
 
     logger.info("Background server jobs threads launched, joining them.")
-    
+
     for thread in threads:
         if thread is not None:
             thread.join()
@@ -51,8 +53,4 @@ def main():
 
 
 if __name__ == "__main__":
-    """
-    This script should be executed alongside to the server.
-    Running it in the same process as the server may (and most probably will) cause issues.
-    """
     main()

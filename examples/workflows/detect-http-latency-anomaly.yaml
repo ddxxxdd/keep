@@ -1,0 +1,34 @@
+workflow:
+  id: detect-http-latency-anomaly
+  name: Detect HTTP Latency Anomaly
+  description: 检测 HTTP 服务器延迟异常，当检测到异常时发送 Slack 通知
+  triggers:
+    - type: manual
+  steps:
+    - name: detect-anomalies
+      provider:
+        type: anomaly_detector
+        config: "{{ providers.anomaly-detector-prod }}"
+        with:
+          metric: "keep_http_server_duration_seconds_bucket"
+          time_range: "1h"
+  actions:
+    - name: send-alert-if-anomaly
+      condition: "{{ steps.detect-anomalies.status == 'success' and steps.detect-anomalies.anomaly_count > 0 }}"
+      provider:
+        type: slack
+        config: "{{ providers.slack }}"
+        with:
+          message: |
+            检测到 HTTP 延迟异常！
+            
+            指标: {{ steps.detect-anomalies.metric }}
+            异常数量: {{ steps.detect-anomalies.anomaly_count }}
+            平均延迟: {{ steps.detect-anomalies.mean }}s
+            标准差: {{ steps.detect-anomalies.std }}s
+            
+            异常点详情:
+            {{#each steps.detect-anomalies.anomalies}}
+            - 索引: {{ this.index }}, 值: {{ this.value }}, 评分: {{ this.score }}
+            {{/each}}
+
