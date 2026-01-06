@@ -1,6 +1,7 @@
 # Data Model: Anomaly Detector Provider
 
 **Date**: 2025-12-29  
+**Updated**: 2025-01-27  
 **Feature**: 001-anomaly-detector-provider
 
 ## Overview
@@ -31,6 +32,7 @@ Provider 的认证和配置信息，通过 Keep UI 配置并存储在 Secret Man
 | `query_range_seconds` | `int` | No | `3600` | Prometheus 查询时间范围（秒） |
 | `query_step` | `str` | No | `"60s"` | Prometheus 查询步长（如 `"60s"`, `"15s"`） |
 | `rate_change_threshold` | `float` | No | `0.5` | 环比变化阈值（例如 0.5 = 相对基线 +50%） |
+| `min_anomaly_count_for_alert` | `int` | No | `1` | 触发告警的最小异常数量阈值（只有当 `anomaly_count >= min_anomaly_count_for_alert` 时才发送告警） |
 
 **Validation Rules**:
 - `prometheus_url` 必须是有效的 HTTP/HTTPS URL

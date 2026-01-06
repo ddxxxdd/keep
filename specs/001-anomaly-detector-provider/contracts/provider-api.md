@@ -1,6 +1,7 @@
 # Provider API Contract: Anomaly Detector Provider
 
 **Date**: 2025-12-29  
+**Updated**: 2025-01-27  
 **Feature**: 001-anomaly-detector-provider  
 **Provider Type**: `anomaly_detector`
 

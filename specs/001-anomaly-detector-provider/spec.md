@@ -2,8 +2,9 @@
 
 **Feature Branch**: `001-anomaly-detector-provider`  
 **Created**: 2025-12-29  
+**Updated**: 2025-01-27  
 **Status**: Draft  
-**Input**: User description: "现在要添加一个需求就是，之前我是通过再@docker-compose-with-otel.yaml 中添加了一个服务的方式来实现的，现在需要将其改造成自定义provider的方式来实现，要求和原来的效果一样，并且之前已经做过一版 @anomaly_detector_provider 就是这个，然后我需要你完成我上述的要求"
+**Input**: User description: "我需要给当前的keep平台添加一个自定义provider，这是一个异常检测的provider，可以从Prometheus服务中获取指标信息，然后根据相应的异常检测算法来检测指标是否发生了异常，当发现异常之后，还需要随之给keep平台发送相应的告警，对001分支进行全面的修改，所有描述文件全部使用中文"
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -41,7 +42,7 @@
 
 作为工作流编写者，我希望在步骤中调用 Anomaly Detector provider 时，可以像使用其他数据类 provider 一样，在后续步骤中基于检测结果进行条件判断、分支选择和通知触发，从而用统一的工作流机制消费异常检测结果。
 
-**Why this priority**: 异常检测从“后台自动推送”改为“按需查询”，只有在工作流中方便地使用结果，迁移才真正可落地。
+**Why this priority**: 异常检测从"后台自动推送"改为"按需查询"，只有在工作流中方便地使用结果，迁移才真正可落地。
 
 **Independent Test**: 构建一个简单工作流：先调用 Anomaly Detector provider 得到异常检测结果，再根据 `status` 或 `anomaly_count` 是否大于 0 决定是否发送通知；验证在有/无异常的情况下工作流行为符合预期。
 
@@ -52,12 +53,30 @@
 
 ---
 
+### User Story 4 - 检测到异常后自动发送告警到 Keep 平台 (Priority: P1)
+
+作为运维人员，我希望 Anomaly Detector provider 在检测到异常时能够自动向 Keep 平台发送告警，就像之前的独立异常检测服务一样，从而无需通过工作流就能及时收到异常通知。
+
+**Why this priority**: 这是用户的核心需求，确保迁移后能够保持与旧服务相同的自动告警能力，无需额外配置工作流即可获得异常通知。
+
+**Independent Test**: 配置 Anomaly Detector provider 并执行异常检测，当检测到异常数量超过配置的阈值时，在 Keep 平台的告警列表中能够看到自动创建的告警，且告警包含完整的异常检测信息。
+
+**Acceptance Scenarios**:
+
+1. **Given** 已配置并安装 Anomaly Detector provider，**When** provider 在执行 `_query` 方法时检测到异常数量超过配置的阈值，**Then** provider 自动向 Keep 平台发送告警，告警在 Keep 前端界面中可见。
+2. **Given** 上述场景中检测到的异常数量未超过阈值，**When** provider 执行检测，**Then** 不会发送告警，但检测结果仍然正常返回。
+3. **Given** provider 自动发送的告警，**When** 查看告警详情，**Then** 告警包含完整的异常检测信息：指标名称、异常数量、异常点详情（时间戳、数值、评分）、检测算法、统计信息（均值、标准差）等。
+
+---
+
 ### Edge Cases
 
-- 当 Prometheus/Tempo/Loki 任一数据源的地址配置错误、不可达或认证失败时，provider 初始化或查询应给出清晰的错误信息，并在 UI 或执行日志中可见，避免“静默失败”。
+- 当 Prometheus/Tempo/Loki 任一数据源的地址配置错误、不可达或认证失败时，provider 初始化或查询应给出清晰的错误信息，并在 UI 或执行日志中可见，避免"静默失败"。
 - 当选定的 Prometheus 指标或 traces/logs 查询在给定时间窗口内没有任何数据点时，provider 应返回 `status=no_data`（或等价标识），而不是抛出未处理异常。
 - 当可用数据点数量少于 `min_data_points` 时，provider 应返回 `status=insufficient_data` 并包含当前数据点数量，以便用户理解为何未进行检测。
 - 当 Prometheus 指标的基线几乎为 0 时（例如长时间无请求的服务），对于突然出现的非零值，provider 应有合理的异常判断逻辑，避免全部被视为正常或全部视为异常；对 traces/logs 也应在查询条件为空或极少数据时避免误判。
+- 当自动发送告警失败时（如 Keep API 不可达、认证失败等），provider 应记录错误日志，但不影响异常检测结果的正常返回，确保检测功能本身不受影响。
+- 当同一指标在短时间内多次检测到异常时，应使用 Keep 平台的默认去重机制（基于 fingerprint）避免重复告警，确保告警列表不会因相同异常而产生大量重复条目。
 
 ## Requirements *(mandatory)*
 
@@ -73,6 +92,13 @@
 - **FR-008**: 对于计数型指标（如以 `_count`、`_sum`、`_total`、`_bucket` 结尾的指标），Provider 必须自动按原有服务约定使用 `rate()` 包装查询（例如 `rate(metric[3m])`），以保持与旧实现相同的语义；对于 traces/logs 这类事件型数据，应在设计上提供等价的“速率”或频次分析能力。
 - **FR-009**: 在不配置任何“旧服务特有环境变量”（如 `ANOMALY_DETECTOR_*`）的情况下，只要安装并配置了 Anomaly Detector provider，现有 Keep 主服务和 docker-compose 编排文件不应再依赖单独的异常检测后台容器即可完成异常检测。
 - **FR-010**: 文档或配置示例中必须给出一份推荐配置，说明如何在 UI 中设置各个字段以复现 `docker-compose-with-otel.yaml` 中被注释掉的异常检测服务效果，便于用户迁移。
+- **FR-011**: Provider 在 `_query` 方法中检测到异常时，必须自动向 Keep 平台发送告警，完全模拟旧独立服务的自动告警行为，无需通过工作流即可触发告警。
+- **FR-012**: Provider 必须支持配置异常数量阈值（`min_anomaly_count_for_alert`），只有当检测到的异常数量大于等于该阈值时才发送告警；该阈值应在 provider 配置中可设置，默认值为 1（即 `anomaly_count >= 1`）。
+- **FR-013**: Provider 自动发送的告警必须包含完整的异常检测信息，至少包括：告警名称（基于指标名称）、告警描述（包含异常数量、检测算法、统计信息等）、告警严重程度、异常点详情（时间戳、数值、评分）、检测时间等。
+- **FR-014**: Provider 必须为自动发送的告警生成合适的 fingerprint，以便 Keep 平台能够正确进行告警去重，避免相同指标的重复告警；fingerprint 应基于指标名称和关键标签。
+- **FR-015**: 当自动发送告警失败时（如 Keep API 调用失败、网络错误等），Provider 必须记录详细的错误日志，但不影响异常检测结果的正常返回，确保检测功能本身不受告警发送失败的影响。
+- **FR-016**: Provider 必须支持一种“批量检测模式”，在该模式下无需在工作流中逐条写出具体 Prometheus 指标名：系统通过 Provider 配置中的包含/排除规则（如 `include_metrics`/`exclude_metrics`，支持前缀或正则）以及全局最大指标数量上限（例如最多检测 100 条指标），从 Prometheus 自动发现一组候选指标集合，仅对这组候选指标执行异常检测，并对每个检测到异常的指标分别自动发送告警。
+- **FR-017**: 在“批量检测模式”下，Provider 必须返回至少包含以下字段的汇总结果：运行模式（单指标/批量）、本次检测的指标总数、实际执行异常检测的指标数量、已发送告警的指标数量，以及每个指标对应的检测结果摘要（包括指标名、状态、异常数量等），以便在调试和验证时查看整体检测情况。
 
 ### Key Entities *(include if feature involves data)*
 
@@ -87,7 +113,9 @@
 - **SC-001**: 在不启动旧 `keep-anomaly-detector` 容器的前提下，至少 95% 依赖异常检测的现有或新建工作流能够仅通过 Anomaly Detector provider 成功完成并返回检测结果。
 - **SC-002**: 使用推荐配置对典型 HTTP 请求指标进行故障注入测试时，新 provider 检测到的异常点与旧实现的检测结果在“是否发现异常”这一维度上的一致率达到 90% 以上。
 - **SC-003**: 在 Prometheus 正常可用的前提下，通过 provider 进行单次异常检测的工作流步骤失败率（因配置错误、处理失败等导致的非预期错误）低于 2%。
-- **SC-004**: 在完成迁移并停用旧异常检测容器后，相关的运维反馈或支持工单中，与“异常检测缺失/异常行为”相关的问题数量不高于迁移前一个对比周期。
+- **SC-004**: 在完成迁移并停用旧异常检测容器后，相关的运维反馈或支持工单中，与"异常检测缺失/异常行为"相关的问题数量不高于迁移前一个对比周期。
+- **SC-005**: 当检测到异常数量超过配置的阈值时，Provider 自动发送告警的成功率（告警成功创建并出现在 Keep 前端界面）应不低于 95%。
+- **SC-006**: 自动发送的告警应正确使用 Keep 平台的去重机制，相同指标的重复告警去重率应达到 100%（即不会出现基于相同 fingerprint 的重复告警）。
 
 ## Clarifications
 
@@ -95,118 +123,22 @@
 
 - Q: 新 provider 是否需要同时支持 Prometheus 指标、Tempo traces 和 Loki logs 的异常检测？ → A: 需要同时支持指标、traces 和日志
 
-# Feature Specification: [FEATURE NAME]
+### Session 2025-01-27
 
-**Feature Branch**: `[###-feature-name]`  
-**Created**: [DATE]  
-**Status**: Draft  
-**Input**: User description: "$ARGUMENTS"
+- Q: 自动发送告警的触发方式是什么？ → A: 仅在 `_query` 方法中检测到异常时自动发送告警（完全模拟旧服务行为）
+- Q: 告警的触发条件是什么？ → A: 只有当异常数量超过某个阈值（如 `anomaly_count >= 3`）时才发送告警
+- Q: 异常数量阈值是否可配置？ → A: 阈值可配置（在 provider 配置中设置），默认值为 1（即 `anomaly_count >= 1`）
+- Q: 告警内容应包含哪些信息？ → A: 包含完整的异常检测信息（指标名称、异常数量、异常点详情、检测算法、统计信息等）
+- Q: 告警去重策略是什么？ → A: 使用 Keep 平台的默认去重机制（基于 fingerprint）
 
-## User Scenarios & Testing *(mandatory)*
+### Session 2026-01-05
 
-<!--
-  IMPORTANT: User stories should be PRIORITIZED as user journeys ordered by importance.
-  Each user story/journey must be INDEPENDENTLY TESTABLE - meaning if you implement just ONE of them,
-  you should still have a viable MVP (Minimum Viable Product) that delivers value.
-  
-  Assign priorities (P1, P2, P3, etc.) to each story, where P1 is the most critical.
-  Think of each story as a standalone slice of functionality that can be:
-  - Developed independently
-  - Tested independently
-  - Deployed independently
-  - Demonstrated to users independently
--->
+- Q: 是否需要支持“无需逐条写 Prometheus 指标名，而是自动检测一组 Prometheus 指标并对其中的异常指标发送告警”？ → A: 需要支持，但应通过 `include_metrics`/`exclude_metrics` 等可配置规则和全局最大指标数量上限来限定候选指标集合，而不是每次无上限地扫描 Prometheus 中的所有指标。
 
-### User Story 1 - [Brief Title] (Priority: P1)
+## Assumptions
 
-[Describe this user journey in plain language]
-
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently - e.g., "Can be fully tested by [specific action] and delivers [specific value]"]
-
-**Acceptance Scenarios**:
-
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-2. **Given** [initial state], **When** [action], **Then** [expected outcome]
-
----
-
-### User Story 2 - [Brief Title] (Priority: P2)
-
-[Describe this user journey in plain language]
-
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently]
-
-**Acceptance Scenarios**:
-
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-
----
-
-### User Story 3 - [Brief Title] (Priority: P3)
-
-[Describe this user journey in plain language]
-
-**Why this priority**: [Explain the value and why it has this priority level]
-
-**Independent Test**: [Describe how this can be tested independently]
-
-**Acceptance Scenarios**:
-
-1. **Given** [initial state], **When** [action], **Then** [expected outcome]
-
----
-
-[Add more user stories as needed, each with an assigned priority]
-
-### Edge Cases
-
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right edge cases.
--->
-
-- What happens when [boundary condition]?
-- How does system handle [error scenario]?
-
-## Requirements *(mandatory)*
-
-<!--
-  ACTION REQUIRED: The content in this section represents placeholders.
-  Fill them out with the right functional requirements.
--->
-
-### Functional Requirements
-
-- **FR-001**: System MUST [specific capability, e.g., "allow users to create accounts"]
-- **FR-002**: System MUST [specific capability, e.g., "validate email addresses"]  
-- **FR-003**: Users MUST be able to [key interaction, e.g., "reset their password"]
-- **FR-004**: System MUST [data requirement, e.g., "persist user preferences"]
-- **FR-005**: System MUST [behavior, e.g., "log all security events"]
-
-*Example of marking unclear requirements:*
-
-- **FR-006**: System MUST authenticate users via [NEEDS CLARIFICATION: auth method not specified - email/password, SSO, OAuth?]
-- **FR-007**: System MUST retain user data for [NEEDS CLARIFICATION: retention period not specified]
-
-### Key Entities *(include if feature involves data)*
-
-- **[Entity 1]**: [What it represents, key attributes without implementation]
-- **[Entity 2]**: [What it represents, relationships to other entities]
-
-## Success Criteria *(mandatory)*
-
-<!--
-  ACTION REQUIRED: Define measurable success criteria.
-  These must be technology-agnostic and measurable.
--->
-
-### Measurable Outcomes
-
-- **SC-001**: [Measurable metric, e.g., "Users can complete account creation in under 2 minutes"]
-- **SC-002**: [Measurable metric, e.g., "System handles 1000 concurrent users without degradation"]
-- **SC-003**: [User satisfaction metric, e.g., "90% of users successfully complete primary task on first attempt"]
-- **SC-004**: [Business metric, e.g., "Reduce support tickets related to [X] by 50%"]
+- Prometheus 服务已部署并可访问，提供标准的 Prometheus Query API
+- Keep 平台已部署并运行，支持自定义 Provider 的安装和配置
+- 用户具备基本的 Prometheus 指标查询知识（PromQL）
+- 异常检测算法（Z-Score、Isolation Forest）的实现已存在于 Keep 平台中
+- Keep 平台提供告警处理机制（`process_event` 函数），支持告警的去重和存储

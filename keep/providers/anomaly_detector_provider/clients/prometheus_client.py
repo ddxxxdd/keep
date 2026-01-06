@@ -82,3 +82,75 @@ class PrometheusClient:
             return []
         return result.get("data", {}).get("result", [])
 
+    def list_metrics(
+        self,
+        include_patterns: list[str] | None = None,
+        exclude_patterns: list[str] | None = None,
+        max_metrics: int = 100,
+    ) -> list[str]:
+        """
+        列出 Prometheus 中的指标名称，并根据包含/排除规则和数量上限做过滤。
+
+        - 默认从 /api/v1/label/__name__/values 端点获取所有指标名
+        - include_patterns: 正则或前缀模式列表；为空则表示不过滤（全量作为候选）
+        - exclude_patterns: 正则或前缀模式列表；匹配到的指标会被排除
+        - max_metrics: 返回的最大指标数量；<=0 时使用默认上限 100
+        """
+        include_patterns = include_patterns or []
+        exclude_patterns = exclude_patterns or []
+        if max_metrics <= 0:
+            max_metrics = 100
+
+        try:
+            result = self._make_request("/api/v1/label/__name__/values", {})
+        except Exception:
+            return []
+
+        if result.get("status") != "success":
+            return []
+
+        names = result.get("data") or []
+
+        import re
+
+        def _match_any(name: str, patterns: list[str]) -> bool:
+            if not patterns:
+                return True
+            for pattern in patterns:
+                if not pattern:
+                    continue
+                try:
+                    if re.search(pattern, name):
+                        return True
+                except re.error:
+                    # 如果不是合法正则，则退化为前缀匹配
+                    if name.startswith(pattern):
+                        return True
+            return False
+
+        def _match_exclude(name: str, patterns: list[str]) -> bool:
+            if not patterns:
+                return False
+            for pattern in patterns:
+                if not pattern:
+                    continue
+                try:
+                    if re.search(pattern, name):
+                        return True
+                except re.error:
+                    if name.startswith(pattern):
+                        return True
+            return False
+
+        filtered: list[str] = []
+        for metric_name in names:
+            if include_patterns and not _match_any(metric_name, include_patterns):
+                continue
+            if _match_exclude(metric_name, exclude_patterns):
+                continue
+            filtered.append(metric_name)
+            if len(filtered) >= max_metrics:
+                break
+
+        return filtered
+

@@ -1,5 +1,6 @@
 import http.client
 import inspect
+import json
 import logging
 import logging.config
 import logging.handlers
@@ -242,9 +243,36 @@ class ProviderLoggerAdapter(logging.LoggerAdapter):
         # Create a new logger specifically for this adapter
         self.provider_logger = logging.getLogger(f"provider.{provider_id}")
 
-        # Add the ProviderDBHandler only to this specific logger
-        handler = ProviderDBHandler()
-        self.provider_logger.addHandler(handler)
+        # 确保 logger 不会重复添加 handler（避免重复日志）
+        if not self.provider_logger.handlers:
+            # Add StreamHandler to output to stdout (Docker logs)
+            stream_handler = logging.StreamHandler(sys.stdout)
+            # 使用与系统一致的格式化器（延迟获取，确保类已定义）
+            LOG_FORMAT = os.environ.get("LOG_FORMAT", "open_telemetry")
+            if LOG_FORMAT == "dev_terminal":
+                # DevTerminalFormatter 在类定义之后，但 __init__ 执行时已存在
+                formatter = DevTerminalFormatter()
+            else:
+                # CustomJsonFormatter 在类定义之后，但 __init__ 执行时已存在
+                formatter = CustomJsonFormatter()
+            stream_handler.setFormatter(formatter)
+            stream_handler.setLevel(logging.DEBUG)
+            self.provider_logger.addHandler(stream_handler)
+            
+            # Add the ProviderDBHandler for database storage
+            db_handler = ProviderDBHandler()
+            self.provider_logger.addHandler(db_handler)
+        
+        # 设置日志级别
+        self.provider_logger.setLevel(
+            os.environ.get(
+                f"KEEP_{provider_id.upper()}_PROVIDER_LOG_LEVEL",
+                os.environ.get("LOG_LEVEL", "INFO"),
+            )
+        )
+        
+        # 防止日志传播到父 logger（避免重复输出）
+        self.provider_logger.propagate = False
 
         # Initialize the adapter with the new logger
         super().__init__(self.provider_logger, {})
@@ -324,6 +352,9 @@ WORKER_TYPE = get_worker_type()
 
 class CustomJsonFormatter(jsonlogger.JsonFormatter):
     def __init__(self, *args, rename_fields=None, **kwargs):
+        # 设置 json_serializer 确保中文字符不被编码为 Unicode
+        if 'json_serializer' not in kwargs:
+            kwargs['json_serializer'] = lambda obj: json.dumps(obj, ensure_ascii=False, default=str)
         super().__init__(*args, **kwargs)
         self.rename_fields = rename_fields if RUNNING_IN_CLOUD_RUN else {}
 
@@ -332,6 +363,20 @@ class CustomJsonFormatter(jsonlogger.JsonFormatter):
         # Add worker type to all logs
         if WORKER_TYPE:
             log_record["worker_type"] = getattr(record, "worker_type", WORKER_TYPE)
+    
+    def format(self, record):
+        # 调用父类方法获取 JSON 字符串
+        json_str = super().format(record)
+        # 如果父类方法已经使用了 json_serializer，这里不需要额外处理
+        # 但为了确保，我们可以重新解析并序列化
+        try:
+            # 解析 JSON 字符串
+            log_dict = json.loads(json_str)
+            # 重新序列化，确保 ensure_ascii=False
+            return json.dumps(log_dict, ensure_ascii=False, default=str)
+        except (json.JSONDecodeError, TypeError):
+            # 如果解析失败，返回原始字符串
+            return json_str
 
 
 CONFIG = {
